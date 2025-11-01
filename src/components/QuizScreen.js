@@ -116,7 +116,7 @@ function TieBreakerIntro({ round, tiedTeams, onStart }) {
   );
 }
 
-// Confetti (existing)
+// Confetti
 function ConfettiCelebration() {
   const vectors = [
     { dx: 0, dy: -170 },
@@ -146,7 +146,7 @@ function ConfettiCelebration() {
   );
 }
 
-// Restart modal (existing)
+// Restart modal
 function RestartModal({ onConfirm, onCancel }) {
   return (
     <div className="restart-modal-overlay">
@@ -203,20 +203,19 @@ function QuizScreen({ quizState, setQuizState }) {
   const [timeUp, setTimeUp] = useState(false);
   const [questionRevealed, setQuestionRevealed] = useState(false);
   const [showRoundCompleteScreen, setShowRoundCompleteScreen] = useState(false);
-  const [showConfirmRestart, setShowConfirmRestart] = useState(false); // NEW
+  const [showConfirmRestart, setShowConfirmRestart] = useState(false);
   const timerRef = useRef();
   const isFirstMount = useRef(true);
 
-  // Use the trimmed arrays from quizState (set in SetupScreen) — fallback to empty arrays
+  // Set questions for round
   useEffect(() => {
     if (round === "main") setQuestions(quizState.questions ?? []);
     else if (round === "tiebreaker") setQuestions(quizState.tiebreaker ?? []);
-    else if (round === "final")
-      setQuestions(quizState.finalTiebreaker ?? []);
+    else if (round === "final") setQuestions(quizState.finalTiebreaker ?? []);
     else setQuestions([]);
   }, [round, quizState]);
 
-  // Show round complete screen when we've reached the end of the trimmed questions for this round
+  // Show round complete screen only when all questions are done
   useEffect(() => {
     if (!started) return;
     const qLen = questions.length;
@@ -354,19 +353,18 @@ function QuizScreen({ quizState, setQuizState }) {
     setTimeUp(timer?.timeLeft === 0 && !showAnswer);
   }, [timer, showAnswer]);
 
-  // roundFinished uses the actual trimmed questions length
-  const roundFinished = started && currentQuestion >= questions.length;
+  // --- ONLY finish quiz after ALL questions are answered ---
+  const roundFinished = started && questions.length > 0 && currentQuestion >= questions.length;
 
   useEffect(() => {
     if (!roundFinished) return;
     if (quizState.round === "finished") return;
     if (quizState.tieIntro) return;
+    // Only finish after last question
     const scoringTeams =
       quizState.aliveTeams && quizState.aliveTeams.length
         ? quizState.aliveTeams
         : quizState.teams;
-    const questionLen = questions.length;
-    if (currentQuestion < questionLen) return;
     const aliveScores = scoringTeams.map((team) => scores[team] || 0);
     const maxScore = Math.max(...aliveScores);
     const tiedTeams = scoringTeams.filter(
@@ -397,9 +395,9 @@ function QuizScreen({ quizState, setQuizState }) {
       localStorage.setItem("quizState", JSON.stringify(next));
       setQuizState(next);
     }
-  }, [roundFinished]);
+  }, [roundFinished, quizState, scores, round, questions.length]);
 
-  // --- LEADERBOARD SCROLL: Always show first 5 teams at the top ---
+  // leaderboard, refs, all your handlers, and rendering (unchanged)
   const leaderboard = useMemo(() => {
     const arr = teamsToUse.map((team) => ({
       name: team,
@@ -413,7 +411,6 @@ function QuizScreen({ quizState, setQuizState }) {
   }, [teamsToUse, scores]);
   const highestScore = leaderboard.length > 0 ? leaderboard[0].score : 0;
 
-  // Helper: scroll leaderboard to top on render so first 5 always show
   const teamListRef = useRef();
   useEffect(() => {
     if (teamListRef.current) {
