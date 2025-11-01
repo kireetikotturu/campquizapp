@@ -1126,7 +1126,7 @@ function QuizScreen({ quizState, setQuizState }) {
             Correct
           </button>
           <button className="control-btn red" onClick={handleReveal} disabled={showAnswer || !questionRevealed}>
-            Reveal Answer
+            Reveal
           </button>
           <button className="control-btn" onClick={handleNext} disabled={!showAnswer}>
             Next Question

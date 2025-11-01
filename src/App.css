@@ -1,10 +1,23 @@
+/* ======= Global App Styles ======= */
 .App {
   text-align: center;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(120deg, #f5f7fa, #e0eafc 100%);
+  font-family: "Poppins", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #333;
+  padding: 1rem;
+  overflow-x: hidden;
 }
 
+/* Logo animation (optional) */
 .App-logo {
   height: 40vmin;
   pointer-events: none;
+  margin-bottom: 1rem;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -13,6 +26,7 @@
   }
 }
 
+/* Header section */
 .App-header {
   background-color: #282c34;
   min-height: 100vh;
@@ -22,12 +36,45 @@
   justify-content: center;
   font-size: calc(10px + 2vmin);
   color: white;
+  text-align: center;
+  padding: 1.5rem;
 }
 
+/* General link styles */
 .App-link {
-  color: #61dafb;
+  color: #49a09d;
+  text-decoration: none;
+  transition: color 0.3s ease;
 }
 
+.App-link:hover {
+  color: #5f2c82;
+}
+
+/* Button reset (optional) */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .App {
+    padding: 0.5rem;
+  }
+
+  .App-header {
+    font-size: calc(10px + 1.8vmin);
+    padding: 1rem;
+  }
+
+  .App-logo {
+    height: 30vmin;
+  }
+}
+
+/* Logo rotation */
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
