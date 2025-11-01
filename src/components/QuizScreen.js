@@ -1,8 +1,5 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import questionsData from "../data/questions.json";
-import tiebreakerQuestions from "../data/tiebreaker.json";
-import finalTiebreakerQuestions from "../data/finaltiebreaker.json";
 import CircularTimer from "./CircularTimer";
 import "./QuizScreen.css";
 
