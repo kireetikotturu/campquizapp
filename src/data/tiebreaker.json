@@ -1,0 +1,23 @@
+[
+  {
+    "question": "What is the smallest country in the world?",
+    "answer": "Vatican City"
+  },
+  {
+    "question": "Which monument is shown below?",
+    "media": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+    "answer": "Taj Mahal"
+  },
+  {
+    "question": "What is the main ingredient in guacamole?",
+    "answer": "Avocado"
+  },
+  {
+    "question": "Which planet has the most moons?",
+    "answer": "Saturn"
+  },
+  {
+    "question": "What is the fastest land animal?",
+    "answer": "Cheetah"
+  }
+]

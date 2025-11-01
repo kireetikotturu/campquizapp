@@ -1,0 +1,23 @@
+[
+  {
+    "question": "What is the largest ocean on Earth?",
+    "answer": "Pacific Ocean"
+  },
+  {
+    "question": "Which monument is shown below?",
+    "media": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+    "answer": "Taj Mahal"
+  },
+  {
+    "question": "What gas do humans need to breathe in to survive?",
+    "answer": "Oxygen"
+  },
+  {
+    "question": "Which planet is closest to the Sun?",
+    "answer": "Mercury"
+  },
+  {
+    "question": "In which sport would you perform a slam dunk?",
+    "answer": "Basketball"
+  }
+]
