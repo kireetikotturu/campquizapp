@@ -399,6 +399,7 @@ function QuizScreen({ quizState, setQuizState }) {
     }
   }, [roundFinished]);
 
+  // --- LEADERBOARD SCROLL: Always show first 5 teams at the top ---
   const leaderboard = useMemo(() => {
     const arr = teamsToUse.map((team) => ({
       name: team,
@@ -411,6 +412,14 @@ function QuizScreen({ quizState, setQuizState }) {
     return arr;
   }, [teamsToUse, scores]);
   const highestScore = leaderboard.length > 0 ? leaderboard[0].score : 0;
+
+  // Helper: scroll leaderboard to top on render so first 5 always show
+  const teamListRef = useRef();
+  useEffect(() => {
+    if (teamListRef.current) {
+      teamListRef.current.scrollTop = 0;
+    }
+  }, [leaderboard.length]);
 
   const handlePausePlay = () => {
     setQuizState((prevState) => {
@@ -738,7 +747,7 @@ function QuizScreen({ quizState, setQuizState }) {
           </div>
           <div className="leaderboard-container">
             <h2 className="leaderboard-title">Leaderboard</h2>
-            <ul className="team-list">
+            <ul className="team-list" ref={teamListRef}>
               {leaderboard.map((teamObj) => (
                 <li className="team-item" key={teamObj.name}>
                   <span>{teamObj.name}</span>
@@ -917,7 +926,7 @@ function QuizScreen({ quizState, setQuizState }) {
           </div>
           <div className="leaderboard-container">
             <h2 className="leaderboard-title">Leaderboard</h2>
-            <ul className="team-list">
+            <ul className="team-list" ref={teamListRef}>
               <AnimatePresence>
                 {leaderboard.map((teamObj) => (
                   <motion.li
@@ -990,7 +999,11 @@ function QuizScreen({ quizState, setQuizState }) {
     isMediaUrl(questionObj?.question) &&
     renderMedia(questionObj?.question, {}, true);
   const explicitMedia =
-    questionObj?.media && renderMedia(questionObj.media, {}, true);
+    questionObj?.media && renderMedia(questionObj?.media, {}, true);
+
+  // Add question progress variables
+  const totalQuestions = questions.length;
+  const currentQNum = currentQuestion + 1; // 1-based index
 
   return (
     <div className="container" style={{ position: "relative" }}>
@@ -1019,7 +1032,7 @@ function QuizScreen({ quizState, setQuizState }) {
         </div>
         <div className="leaderboard-container">
           <h2 className="leaderboard-title">Leaderboard</h2>
-          <ul className="team-list">
+          <ul className="team-list" ref={teamListRef}>
             <AnimatePresence>
               {leaderboard.map((teamObj, i) => (
                 <motion.li
@@ -1108,7 +1121,17 @@ function QuizScreen({ quizState, setQuizState }) {
           </div>
         ) : (
           <div className={`question-box responsive-media-box`}>
-            <span style={{ width: "100%", marginBottom: "6px", textAlign: "center" }}>
+            <span className="question-progress">
+              {currentQNum}/{totalQuestions}
+            </span>
+            <span
+              className="question-main-text"
+              style={{
+                width: "100%",
+                marginBottom: "12px",
+                textAlign: "center",
+              }}
+            >
               {questionObj?.question}
             </span>
             {questionMedia}

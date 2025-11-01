@@ -3,8 +3,8 @@
   background: rgba(255, 255, 255, 0.97);
   border-radius: 50%;
   box-shadow: 0 4px 18px rgba(231, 234, 252, 0.25);
-  min-width: 100px;
-  min-height: 100px;
+  min-width: 120px;
+  min-height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14,7 +14,7 @@
 }
 
 .circular-timer-wrapper:hover {
-  transform: scale(1.03);
+  transform: scale(1.07);
   box-shadow: 0 6px 22px rgba(73, 160, 157, 0.25);
 }
 
@@ -30,6 +30,7 @@
   stroke-linecap: round;
   filter: drop-shadow(0 2px 8px #ffe06655);
   transition: stroke-dashoffset 0.95s cubic-bezier(0.23, 1, 0.32, 1), stroke 0.25s;
+  /* Ensure the ring is drawn above the background ring and fits exactly at the border */
 }
 
 /* Danger state when time is low */
@@ -42,7 +43,7 @@
 .timer-text {
   font-family: "Poppins", "Segoe UI", sans-serif;
   fill: #b08500;
-  font-size: 1.55rem;
+  font-size: 2rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   user-select: none;
