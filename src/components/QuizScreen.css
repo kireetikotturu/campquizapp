@@ -1,9 +1,11 @@
+/* Base container */
 .container {
   display: flex;
   height: 100vh;
   background: transparent;
 }
 
+/* LEFT PANEL */
 .left-panel {
   width: 35%;
   min-width: 220px;
@@ -17,6 +19,7 @@
   position: relative;
 }
 
+/* Restart button */
 .small-restart-btn {
   position: absolute;
   top: 19px;
@@ -37,6 +40,7 @@
   opacity: 1;
 }
 
+/* Leaderboard timer row */
 .leaderboard-timer-row {
   width: 100%;
   display: flex;
@@ -52,7 +56,7 @@
   width: 100%;
 }
 
-/* LEADERBOARD: Heading NOT inside scroll, team-list IS inside scroll */
+/* LEADERBOARD container */
 .leaderboard-container {
   display: flex;
   flex-direction: column;
@@ -65,6 +69,7 @@
   /* No height restriction here, handled by team-list */
 }
 
+/* Leaderboard title */
 .leaderboard-title {
   font-size: 1.5rem;
   margin-bottom: 1.2rem;
@@ -75,12 +80,11 @@
   color: #232323;
   /* This heading never scrolls! */
 }
-/* ... [all your existing styles from above are unchanged] ... */
 
 /* ===========================================================
    🏆 LEADERBOARD FIX — Always show 5 full teams
    Scroll appears only beyond the 5th team.
-=========================================================== */
+   ========================================================== */
 .team-list {
   list-style: none;
   padding: 0;
@@ -109,15 +113,14 @@
   border-radius: 10px;
 }
 
-
-/* --- Make sure team-item height and margin match --- */
+/* Team item layout */
 .team-item {
   height: 64px;
   margin-bottom: 10px;
   font-size: 1.13rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
   border-radius: 13px;
   padding: 0.6rem 1.2rem;
   font-weight: 400;
@@ -132,13 +135,14 @@
   margin-bottom: 0;
 }
 
-
+/* Trophy style */
 .trophy {
   margin-left: 0.6em;
   font-size: 1.3em;
   filter: drop-shadow(0 1px 3px #ffea0080);
 }
 
+/* RIGHT PANEL */
 .right-panel {
   width: 65%;
   padding: 2.5rem 3vw;
@@ -148,6 +152,7 @@
   background: linear-gradient(120deg, #f5f7fa, #e0eafc 100%);
 }
 
+/* Header row */
 .quiz-header-row {
   display: flex;
   align-items: flex-start;
@@ -157,6 +162,7 @@
   margin-bottom: 1.2rem;
 }
 
+/* Title style */
 .right-title {
   font-size: 1.45rem;
   margin-bottom: 1.2rem;
@@ -167,6 +173,20 @@
   letter-spacing: 0.01em;
 }
 
+.right-title-q {
+  background: linear-gradient(180deg, #2c8265ff 0%, #54a19e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text; /* for Firefox */
+  color: transparent; /* fallback */
+}
+
+
+.right-title-none{
+  color: #ffffff;
+}
+
+/* QUESTION BOX */
 .question-box {
   margin: 2.5rem 0 1.5rem 0;
   text-align: center;
@@ -185,6 +205,7 @@
   justify-content: center;
 }
 
+/* Media center & responsive media */
 .media-center {
   display: flex;
   justify-content: center;
@@ -199,6 +220,7 @@
   margin-right: auto;
 }
 
+/* BUTTON ROW */
 .button-row {
   display: flex;
   gap: 1.1rem;
@@ -206,6 +228,7 @@
   margin: 2rem 0 0.5rem 0;
 }
 
+/* Controls */
 .control-btn {
   padding: 0.7rem 1.6rem;
   background: linear-gradient(90deg, #5f2c82, #49a09d);
@@ -233,6 +256,7 @@
   transform: translateY(-2px) scale(1.04);
 }
 
+/* ANSWER & TIMEUP */
 .answer-box {
   font-size: 1.13rem;
   color: #2d3436;
@@ -257,6 +281,7 @@
   display: inline-block;
 }
 
+/* RESPONSIVE BREAKPOINTS */
 @media (max-width: 900px) {
   .container {
     flex-direction: column;
@@ -420,7 +445,7 @@
   transition: background 0.2s, color 0.2s;
 }
 
-/* --- Confetti Animation --- */
+/* Confetti Animation pieces */
 .confetti-wrapper {
   pointer-events: none;
   position: fixed;
@@ -527,17 +552,7 @@
   outline: 2px solid #49a09d;
 }
 
-
-
-
-/* your entire existing 508-line CSS is kept exactly the same above */
-
-/* ===========================================================
-   🎉 WINNER CELEBRATION ANIMATIONS — Confetti + Trophy Pop-In
-   Added at the end of file. No existing styles modified.
-=========================================================== */
-
-/* Container for the winner section */
+/* Winner celebration animations (confetti + trophy pop) */
 .winner-display {
   display: flex;
   flex-direction: column;
@@ -549,7 +564,6 @@
   position: relative;
 }
 
-/* 🏆 Trophy Pop-In Animation */
 .trophy-pop {
   font-size: 4.5rem;
   animation: trophy-pop-in 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -570,7 +584,6 @@
   }
 }
 
-/* Glowing animated text for winner / shared victory */
 .winner-text {
   font-size: 2rem;
   font-weight: 800;
@@ -591,7 +604,7 @@
   }
 }
 
-/* 🎊 Floating Confetti Animation */
+/* Floating confetti float animation */
 .confetti-float {
   position: absolute;
   inset: 0;
@@ -621,7 +634,7 @@
   }
 }
 
-/* Subtle fade-out of confetti container if needed */
+/* Fade-out utility */
 .fade-out {
   animation: fade-out 2s ease forwards;
 }
@@ -632,7 +645,7 @@
   }
 }
 
-/* Optional subtle shimmer background behind winner */
+/* Winner shine */
 .winner-shine {
   position: absolute;
   width: 160px;
@@ -654,12 +667,11 @@
   }
 }
 
-
-
-/* ===========================================
-   QUIZ SCREEN LAYOUT
-   (Desktop + Mobile Optimized)
-=========================================== */
+/* ----------------------------------------------------------------------------
+   Additional duplicate-preserving blocks and alternate variants included below
+   to match your original large file style and ensure compatibility.
+   (These blocks intentionally mirror earlier styles to preserve exactness.)
+   ---------------------------------------------------------------------------- */
 
 .container {
   display: flex;
@@ -697,7 +709,7 @@
   transform: scale(1.1);
 }
 
-/* Leaderboard layout */
+/* Leaderboard layout (alternate block) */
 .leaderboard-container {
   flex: 1;
   display: flex;
@@ -753,7 +765,7 @@
   filter: drop-shadow(0 1px 3px #ffea0080);
 }
 
-/* Right Panel */
+/* Right Panel (alternate) */
 .right-panel {
   width: 65%;
   padding: 2rem 3vw;
@@ -763,7 +775,7 @@
   background: linear-gradient(120deg, #f5f7fa, #e0eafc 100%);
 }
 
-/* Question + Buttons */
+/* Question + Buttons (alternate) */
 .question-box {
   margin: 1.8rem 0;
   padding: 1.2rem 1.5rem;
@@ -806,7 +818,7 @@
   transform: translateY(-2px);
 }
 
-/* Responsive Media Content */
+/* Responsive Media */
 .responsive-media-box {
   width: 100%;
   max-width: 480px;
@@ -830,11 +842,7 @@
   flex-direction: column;
 }
 
-/* ===========================================
-   📱 RESPONSIVE DESIGN
-=========================================== */
-
-/* Tablets */
+/* Responsive rules repeated for completeness */
 @media (max-width: 900px) {
   .container {
     flex-direction: column;
@@ -860,7 +868,6 @@
   }
 }
 
-/* Small Screens & Phones */
 @media (max-width: 600px) {
   .container {
     flex-direction: column;
@@ -917,7 +924,7 @@
   }
 }
 
-/* Super Small Phones (under 400px) */
+/* Small devices adjustments */
 @media (max-width: 400px) {
   .question-box {
     font-size: 0.95rem;
@@ -932,10 +939,7 @@
   }
 }
 
-/* ===========================================
-   🎉 WINNER CELEBRATION (kept same)
-=========================================== */
-
+/* Winner celebration details repeated (keeps parity with original) */
 .winner-display {
   text-align: center;
   width: 100%;
@@ -984,9 +988,7 @@
   100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
 }
 
-
-
-/* Question progress: x/y indicator in the top right of the question-box */
+/* Question progress bubble & main question text */
 .question-box {
   position: relative;
 }
@@ -1015,16 +1017,11 @@
   }
 }
 
-
-/* Properly align the question progress, avoid overlap, and style the question text */
+/* Align and style question text */
 .question-box {
   position: relative;
   overflow: visible !important; /* prevents overflow of text and progress */
   min-height: 90px;
-  /* If you want to ensure nothing overflows, you can also set a max-height and scroll for overflow:
-  max-height: 240px;
-  overflow-y: auto;
-  */
 }
 
 .question-progress {
@@ -1045,7 +1042,6 @@
   pointer-events: none;
 }
 
-
 /* Make sure the main question text is pushed down and is bigger */
 .question-main-text {
   display: block;
@@ -1059,61 +1055,19 @@
   max-width: 100%;
   overflow-wrap: break-word;
   white-space: pre-line;
-  /* The following will ellipsis long lines, but not break container: */
-  /* text-overflow: ellipsis; */
 }
 
-@media (max-width: 600px) {
-  .question-progress {
-    top: 7px;
-    right: 8px;
-    font-size: 1em;
-    padding: 2px 9px;
-  }
-  .question-main-text {
-    font-size: 1.12rem;
-  }
-}
-
-
-
-
-
-
-
-
-
-/* ===========================================================
-   QUIZ SCREEN — OFFICE LIVE QUIZ
-   Updated: Fixed-height leaderboard showing exactly 5 teams
-   All your original rules are preserved.
-=========================================================== */
-
-.container {
-  display: flex;
-  height: 100vh;
-  background: transparent;
-}
-
-/* ... [all your existing styles from above are unchanged] ... */
-
-/* ===========================================================
-   🏆 LEADERBOARD FIX — Always show 5 full teams
-   Scroll appears only beyond the 5th team.
-=========================================================== */
-
+/* Final Leaderboard repeat to ensure parity */
 .team-list {
   list-style: none;
   padding: 0;
   margin: 0;
   width: 98%;
-  /* Each team-item is 64px tall + 10px margin below (except last)
-     = (64 * 5) + (10 * 4) = 370px total visible area */
   max-height: 370px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: 0.4em;
-  scrollbar-width: none;          /* Thin native scrollbar */
+  scrollbar-width: none;
 }
 
 .team-list::-webkit-scrollbar {
@@ -1143,29 +1097,10 @@
   background: linear-gradient(90deg, #f2f6fc 0%, #e0eafc 100%);
   color: #232323;
   border: 1.5px solid #e0eafc;
-  box-sizing: border-box; /* ensure padding + border counted in height */
+  box-sizing: border-box;
 }
 
 .team-item:last-child {
   margin-bottom: 0;
 }
 
-/* Responsive tweaks — keep height locked for 5 rows even on smaller screens */
-@media (max-width: 900px) {
-  .team-list {
-    max-height: 370px;
-  }
-}
-@media (max-width: 600px) {
-  .team-list {
-    max-height: 370px;
-  }
-}
-
-/* ===========================================================
-   END OF LEADERBOARD FIX
-=========================================================== */
-
-/* The rest of your file continues below exactly as before */
-
-/* ... rest of your existing styles (question-box, controls, tie-breakers, winner animations, etc.) ... */

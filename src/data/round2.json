@@ -1,0 +1,28 @@
+{
+  "round": 2,
+  "title": "Current Affairs (Pass-on round)",
+  "description": "Pass-on round — strategic passing allowed.",
+  "pass_on": true,
+  "questions": [
+    {
+      "question": "Which country hosted the UN Climate Change Conference in 2023?",
+      "media": "",
+      "answer": "United Arab Emirates"
+    },
+    {
+      "question": "The G7 summit in 2024 was held in which nation?",
+      "media": "",
+      "answer": "Italy"
+    },
+    {
+      "question": "Which major sporting event was hosted by France in 2024?",
+      "media": "",
+      "answer": "UEFA Euro 2024"
+    },
+    {
+      "question": "Which country launched the Artemis II mission in 2024? (Hypothetical)",
+      "media": "",
+      "answer": "United States"
+    }
+  ]
+}

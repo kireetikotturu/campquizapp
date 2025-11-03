@@ -1,0 +1,24 @@
+{
+  "round": 1,
+  "title": "Science and Technology (Multiple Choice - No Pass-on)",
+  "type": "multiple_choice",
+  "pass_on": false,
+  "questions": [
+    {
+      "id": "r1q1",
+      "question": "What is the chemical symbol for gold?",
+      "options": ["Ag", "Au", "Gd", "Go"],
+      "answerIndex": 1,
+      "timeLimitSeconds": 20,
+      "points": 10
+    },
+    {
+      "id": "r1q2",
+      "question": "Which company created the Rust programming language?",
+      "options": ["Google", "Microsoft", "Mozilla", "Facebook"],
+      "answerIndex": 2,
+      "timeLimitSeconds": 20,
+      "points": 10
+    }
+  ]
+}

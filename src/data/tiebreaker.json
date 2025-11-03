@@ -1,23 +1,40 @@
-[
-  {
-    "question": "What is the smallest country in the world?",
-    "answer": "Vatican City"
-  },
-  {
-    "question": "Which monument is shown below?",
-    "media": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
-    "answer": "Taj Mahal"
-  },
-  {
-    "question": "What is the main ingredient in guacamole?",
-    "answer": "Avocado"
-  },
-  {
-    "question": "Which planet has the most moons?",
-    "answer": "Saturn"
-  },
-  {
-    "question": "What is the fastest land animal?",
-    "answer": "Cheetah"
-  }
-]
+{
+  "round": 999,
+  "id": "tiebreaker",
+  "title": "Tie-Breaker Round",
+  "description": "Tie-breaker (play only if top teams are tied). Questions may be MCQ or text.",
+  "pass_on": true,
+  "questions": [
+    {
+      "id": "tbq1",
+      "question": "Which planet is known as the Red Planet?",
+      "options": ["Earth", "Mars", "Jupiter", "Venus"],
+      "answerIndex": 1,
+      "points": 10,
+      "timeLimitSeconds": 20
+    },
+    {
+      "id": "tbq2",
+      "question": "What is the chemical formula of water?",
+      "answer": "H2O",
+      "points": 10,
+      "timeLimitSeconds": 20
+    },
+    {
+      "id": "tbq3",
+      "question": "Who wrote the play 'Romeo and Juliet'?",
+      "options": ["Christopher Marlowe", "William Shakespeare", "Ben Jonson", "John Webster"],
+      "answerIndex": 1,
+      "points": 10,
+      "timeLimitSeconds": 20
+    },
+    {
+      "id": "tbq4",
+      "question": "Identify the logo (example):",
+      "media": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+      "answer": "Sample Monument",
+      "points": 10,
+      "timeLimitSeconds": 25
+    }
+  ]
+}

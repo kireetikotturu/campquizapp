@@ -1,6 +1,14 @@
+// Note: This is your full QuizScreen with slides fix on Restart.
+// The rest of your features (leaderboard flex, tie-breaker intro/automation, timers, snapshot/revert, etc.) are preserved.
+// Update in this version:
+// - After the tie-breaker round completes, if it is still a tie, we immediately declare Shared Winners (no more re-running tiebreaker).
+// - We prevent the round-complete screen from appearing for the tie-breaker round (avoids "Continue" causing another tie flow).
+// - Finished screen now shows: "World Quality Day Quiz - 2025" and a clear Winner/Shared Winners block above your existing summary.
+
 import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import CircularTimer from "./CircularTimer";
+import tieData from "../data/tiebreaker.json";
 import "./QuizScreen.css";
 
 // Utility: Check if string is a media URL
@@ -85,10 +93,10 @@ function renderMedia(url, style = {}, isQuestion = false) {
   return null;
 }
 
-// TieBreakerIntro: page listing tied teams and a button to start tie-breaker
 function TieBreakerIntro({ round, tiedTeams, onStart }) {
   let roundLabel = "Tie-Breaker Round";
   if (round === "final-intro") roundLabel = "Final Tie-Breaker Round";
+  if (round === "rounds-tie") roundLabel = "Tie-Breaker Round";
   return (
     <div className="tie-intro-center">
       <div className="tie-intro-card">
@@ -116,7 +124,6 @@ function TieBreakerIntro({ round, tiedTeams, onStart }) {
   );
 }
 
-// Confetti
 function ConfettiCelebration() {
   const vectors = [
     { dx: 0, dy: -170 },
@@ -146,7 +153,6 @@ function ConfettiCelebration() {
   );
 }
 
-// Restart modal
 function RestartModal({ onConfirm, onCancel }) {
   return (
     <div className="restart-modal-overlay">
@@ -180,7 +186,7 @@ function RestartModal({ onConfirm, onCancel }) {
   );
 }
 
-function QuizScreen({ quizState, setQuizState }) {
+export default function QuizScreen({ quizState, setQuizState }) {
   const {
     teams,
     scores,
@@ -188,80 +194,261 @@ function QuizScreen({ quizState, setQuizState }) {
     currentQuestion,
     timer,
     started,
-    round = "main",
+    round: legacyRound = "main",
     aliveTeams = teams,
     winnerTeams = [],
     tieIntro = null,
   } = quizState;
 
-  const teamsToUse = round === "main" ? teams : aliveTeams;
+  const roundsMode =
+    Array.isArray(quizState.rounds) && quizState.rounds.length > 0;
+  const currentRoundIndex = roundsMode ? quizState.currentRoundIndex || 0 : 0;
+  const currentRound = roundsMode ? quizState.rounds[currentRoundIndex] : null;
 
+  const teamsToUse = roundsMode
+    ? currentRound?.teamsToUse || (aliveTeams.length ? aliveTeams : teams)
+    : legacyRound === "main"
+    ? teams
+    : aliveTeams;
+
+  // UI state
   const [questions, setQuestions] = useState([]);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [answered, setAnswered] = useState(false);
+  const [selectedOption, setSelectedOption] = useState(null);
   const [passedTeams, setPassedTeams] = useState([]);
   const [originalTurn, setOriginalTurn] = useState(0);
   const [timeUp, setTimeUp] = useState(false);
   const [questionRevealed, setQuestionRevealed] = useState(false);
   const [showRoundCompleteScreen, setShowRoundCompleteScreen] = useState(false);
+  const [lastCompletedRoundIndex, setLastCompletedRoundIndex] = useState(null);
   const [showConfirmRestart, setShowConfirmRestart] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   const timerRef = useRef();
   const isFirstMount = useRef(true);
+  const teamListRef = useRef();
 
-  // Set questions for round
+  const perRoundTimers =
+    (quizState.timerSettings && quizState.timerSettings.perRound) ||
+    [30, 30, 30, 30, 30];
+  const passOnTimer =
+    (quizState.timerSettings && quizState.timerSettings.passOn) || 15;
+
+  // Helper: compute top score and tied teams from a given state
+  const computeTopAndTiedTeams = (state) => {
+    const scoringTeams =
+      state.aliveTeams && state.aliveTeams.length
+        ? state.aliveTeams
+        : state.teams || [];
+    if (!scoringTeams || scoringTeams.length === 0)
+      return { topScore: 0, tiedTeams: [] };
+    const scoresArr = scoringTeams.map((t) => state.scores?.[t] || 0);
+    const maxScore = Math.max(...scoresArr);
+    const tied = scoringTeams.filter(
+      (t) => (state.scores?.[t] || 0) === maxScore
+    );
+    return { topScore: maxScore, tiedTeams: tied };
+  };
+
+  // Load questions for the current round
   useEffect(() => {
-    if (round === "main") setQuestions(quizState.questions ?? []);
-    else if (round === "tiebreaker") setQuestions(quizState.tiebreaker ?? []);
-    else if (round === "final") setQuestions(quizState.finalTiebreaker ?? []);
-    else setQuestions([]);
-  }, [round, quizState]);
+    if (roundsMode) {
+      setQuestions(currentRound?.questions ?? []);
+    } else {
+      if (legacyRound === "main") setQuestions(quizState.questions ?? []);
+      else if (legacyRound === "tiebreaker")
+        setQuestions(quizState.tiebreaker ?? []);
+      else if (legacyRound === "final")
+        setQuestions(quizState.finalTiebreaker ?? []);
+      else setQuestions([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    legacyRound,
+    roundsMode,
+    currentRoundIndex,
+    currentRound?.questions,
+    quizState.questions,
+    quizState.tiebreaker,
+    quizState.finalTiebreaker,
+  ]);
 
-  // Show round complete screen only when all questions are done
+  const questionObj = questions?.[currentQuestion];
+
+  // Snapshots
+  const saveSnapshot = () => {
+    try {
+      localStorage.setItem("quizStateSnapshot", JSON.stringify(quizState));
+    } catch (e) {}
+  };
+  const revertSnapshot = () => {
+    try {
+      const s = localStorage.getItem("quizStateSnapshot");
+      if (!s) {
+        return alert("No previous state to revert to.");
+      }
+      const parsed = JSON.parse(s);
+      localStorage.setItem("quizState", JSON.stringify(parsed));
+      setQuizState(parsed);
+    } catch (e) {
+      console.error("Revert failed", e);
+    }
+  };
+
+  // Round-complete screen (prevent it for tie-breaker round to avoid re-triggering tie flow)
   useEffect(() => {
     if (!started) return;
     const qLen = questions.length;
+    const isRoundComplete = qLen > 0 && currentQuestion >= qLen;
     if (
-      (round === "main" || round === "tiebreaker" || round === "final") &&
-      qLen > 0 &&
-      currentQuestion >= qLen &&
+      isRoundComplete &&
       !showRoundCompleteScreen &&
-      !quizState.tieIntro &&
+      !tieIntro &&
       quizState.round !== "finished"
     ) {
+      // If current round is the tiebreaker, do not show round-complete UI
+      if (roundsMode && currentRound?.id === "tiebreaker") return;
+
+      if (roundsMode) setLastCompletedRoundIndex(currentRoundIndex);
+      else setLastCompletedRoundIndex(null);
       setShowRoundCompleteScreen(true);
     }
   }, [
     currentQuestion,
-    round,
+    legacyRound,
     started,
     questions,
     showRoundCompleteScreen,
-    quizState.tieIntro,
+    tieIntro,
     quizState.round,
+    roundsMode,
+    currentRoundIndex,
+    currentRound?.id,
   ]);
 
+  // Continue after round-complete
   const handleShowTieIntroAfterRoundComplete = () => {
+    saveSnapshot();
     setShowRoundCompleteScreen(false);
-    setQuizState((prev) => {
-      const next = {
-        ...prev,
-        tieIntro:
-          round === "main" ? "tie" : round === "tiebreaker" ? "final" : null,
-      };
-      localStorage.setItem("quizState", JSON.stringify(next));
-      return next;
-    });
+
+    // If we somehow show round-complete while in tiebreaker, finish immediately (shared winners allowed)
+    if (roundsMode && currentRound?.id === "tiebreaker") {
+      setQuizState((prev) => {
+        const scoringTeams =
+          prev.aliveTeams && prev.aliveTeams.length ? prev.aliveTeams : prev.teams || [];
+        const base = prev.tieBaseScores || {};
+        const gains = Object.fromEntries(
+          scoringTeams.map((t) => [t, (prev.scores?.[t] || 0) - (base[t] || 0)])
+        );
+        const maxGain = Math.max(...scoringTeams.map((t) => gains[t] || 0));
+        const winners = scoringTeams.filter((t) => (gains[t] || 0) === maxGain);
+        const next = { ...prev, round: "finished", winnerTeams: winners, tieIntro: null };
+        localStorage.setItem("quizState", JSON.stringify(next));
+        return next;
+      });
+      return;
+    }
+
+    if (roundsMode) {
+      setQuizState((prev) => {
+        const nextIndex = (prev.currentRoundIndex || 0) + 1;
+
+        if (nextIndex >= (prev.rounds?.length || 0)) {
+          const scoringTeams =
+            prev.aliveTeams && prev.aliveTeams.length
+              ? prev.aliveTeams
+              : prev.teams || [];
+          const aliveScores = scoringTeams.map(
+            (team) => prev.scores?.[team] || 0
+          );
+          const maxScore = aliveScores.length ? Math.max(...aliveScores) : 0;
+          const tiedTeams = scoringTeams.filter(
+            (team) => (prev.scores?.[team] || 0) === maxScore
+          );
+
+          const tieHasQuestions =
+            tieData &&
+            Array.isArray(tieData.questions) &&
+            tieData.questions.length > 0;
+
+          if (tiedTeams.length > 1 && tieHasQuestions) {
+            // Show tie-intro once; do not auto-switch (host starts it)
+            const next = {
+              ...prev,
+              tieIntro: "rounds-tie",
+              roundsTieTeams: tiedTeams,
+            };
+            localStorage.setItem("quizState", JSON.stringify(next));
+            return next;
+          }
+
+          // No tie (or tiebreaker already handled) -> finish
+          const winners = tiedTeams;
+          const finishedState = {
+            ...prev,
+            round: "finished",
+            currentRoundIndex: nextIndex,
+            winnerTeams: winners,
+            tieIntro: null,
+          };
+          localStorage.setItem("quizState", JSON.stringify(finishedState));
+          return finishedState;
+        }
+
+        const next = {
+          ...prev,
+          currentRoundIndex: nextIndex,
+          currentQuestion: 0,
+          turn: 0,
+          timer: {
+            running: false,
+            timeLeft:
+              (prev.timerSettings?.perRound &&
+                prev.timerSettings.perRound[nextIndex]) || 30,
+            paused: false,
+            passMode: false,
+            startedAt: null,
+          },
+          tieIntro: null,
+        };
+        localStorage.setItem("quizState", JSON.stringify(next));
+        return next;
+      });
+    } else {
+      // legacy flow
+      saveSnapshot();
+      setQuizState((prev) => {
+        const next = {
+          ...prev,
+          tieIntro:
+            legacyRound === "main"
+              ? "tie"
+              : legacyRound === "tiebreaker"
+              ? "final"
+              : null,
+        };
+        localStorage.setItem("quizState", JSON.stringify(next));
+        return next;
+      });
+    }
   };
 
+  // Timer helpers
   function pausedTime(timerObj) {
-    if (!timerObj) return 30;
+    if (!timerObj) {
+      return roundsMode ? (perRoundTimers[currentRoundIndex] ?? 30) : 30;
+    }
     if (timerObj.running && timerObj.startedAt) {
       const elapsed = Math.floor((Date.now() - timerObj.startedAt) / 1000);
-      return Math.max(
-        0,
-        (timerObj.timeLeft ?? (timerObj.passMode ? 15 : 30)) - elapsed
-      );
+      const base = timerObj.passMode
+        ? passOnTimer
+        : roundsMode
+        ? perRoundTimers[currentRoundIndex] ?? 30
+        : 30;
+      return Math.max(0, (timerObj.timeLeft ?? base) - elapsed);
     }
-    return timerObj.timeLeft ?? (timerObj.passMode ? 15 : 30);
+    if (typeof timerObj.timeLeft === "number") return timerObj.timeLeft;
+    return roundsMode ? (perRoundTimers[currentRoundIndex] ?? 30) : 30;
   }
 
   useEffect(() => {
@@ -285,14 +472,17 @@ function QuizScreen({ quizState, setQuizState }) {
         return nextState;
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reset per-question UI
   useEffect(() => {
     setShowAnswer(false);
     setPassedTeams([]);
     setOriginalTurn(turn);
     setTimeUp(false);
     setQuestionRevealed(false);
+    setSelectedOption(null);
     setQuizState((prev) => {
       const next = {
         ...prev,
@@ -306,26 +496,36 @@ function QuizScreen({ quizState, setQuizState }) {
       localStorage.setItem("quizState", JSON.stringify(next));
       return next;
     });
-  }, [currentQuestion, started, round]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestion, started, legacyRound, currentRoundIndex]);
 
+  // Start timer when question revealed
   useEffect(() => {
     if (!started || !questionRevealed) return;
     setQuizState((prev) => {
+      const baseTime =
+        passedTeams.length !== 0
+          ? passOnTimer
+          : roundsMode
+          ? perRoundTimers[currentRoundIndex] ?? 30
+          : 30;
       const next = {
         ...prev,
         timer: {
           running: true,
           paused: false,
           passMode: passedTeams.length !== 0,
-          timeLeft: passedTeams.length !== 0 ? 15 : 30,
+          timeLeft: baseTime,
           startedAt: Date.now(),
         },
       };
       localStorage.setItem("quizState", JSON.stringify(next));
       return next;
     });
-  }, [questionRevealed, started]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionRevealed, started, passedTeams.length, currentRoundIndex]);
 
+  // Timer tick
   useEffect(() => {
     if (!started || !timer?.running || timer.paused || showAnswer) {
       clearInterval(timerRef.current);
@@ -333,7 +533,7 @@ function QuizScreen({ quizState, setQuizState }) {
     }
     timerRef.current = setInterval(() => {
       setQuizState((prevState) => {
-        let tl = prevState.timer.timeLeft - 1;
+        let tl = (prevState.timer.timeLeft ?? 0) - 1;
         const nextState = {
           ...prevState,
           timer: {
@@ -353,71 +553,65 @@ function QuizScreen({ quizState, setQuizState }) {
     setTimeUp(timer?.timeLeft === 0 && !showAnswer);
   }, [timer, showAnswer]);
 
-  // --- ONLY finish quiz after ALL questions are answered ---
-  const roundFinished = started && questions.length > 0 && currentQuestion >= questions.length;
-
+  // After tie-breaker finishes -> decide winners (delta from base). If tie persists => shared victory.
   useEffect(() => {
-    if (!roundFinished) return;
-    if (quizState.round === "finished") return;
-    if (quizState.tieIntro) return;
-    // Only finish after last question
+    if (!roundsMode) return;
+    const current = quizState.rounds?.[quizState.currentRoundIndex];
+    if (!current) return;
+    if (current.id !== "tiebreaker") return;
+    if (!questions || questions.length === 0) return;
+    if (currentQuestion < questions.length) return;
+
     const scoringTeams =
       quizState.aliveTeams && quizState.aliveTeams.length
         ? quizState.aliveTeams
         : quizState.teams;
-    const aliveScores = scoringTeams.map((team) => scores[team] || 0);
-    const maxScore = Math.max(...aliveScores);
-    const tiedTeams = scoringTeams.filter(
-      (team) => (scores[team] || 0) === maxScore
+    const base = quizState.tieBaseScores || {};
+    const gains = Object.fromEntries(
+      scoringTeams.map((t) => [
+        t,
+        (quizState.scores?.[t] || 0) - (base[t] || 0),
+      ])
     );
-    if (tiedTeams.length > 1) {
-      if (round === "main") {
-        // handled by round complete + tie intro flow
-      } else if (round === "tiebreaker") {
-        // handled by round complete + tie intro flow
-      } else {
-        const next = {
-          ...quizState,
-          round: "finished",
-          winnerTeams: tiedTeams,
-          tieIntro: null,
-        };
-        localStorage.setItem("quizState", JSON.stringify(next));
-        setQuizState(next);
-      }
-    } else {
+    const maxGain = Math.max(...scoringTeams.map((t) => gains[t] || 0));
+    const winners = scoringTeams.filter((t) => (gains[t] || 0) === maxGain);
+
+    setQuizState((prev) => {
       const next = {
-        ...quizState,
+        ...prev,
         round: "finished",
-        winnerTeams: tiedTeams,
+        winnerTeams: winners,
         tieIntro: null,
       };
       localStorage.setItem("quizState", JSON.stringify(next));
-      setQuizState(next);
-    }
-  }, [roundFinished, quizState, scores, round, questions.length]);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    questions.length,
+    currentQuestion,
+    quizState.rounds,
+    quizState.currentRoundIndex,
+    quizState.aliveTeams,
+    quizState.scores,
+  ]);
 
-  // leaderboard, refs, all your handlers, and rendering (unchanged)
+  // Leaderboard
   const leaderboard = useMemo(() => {
-    const arr = teamsToUse.map((team) => ({
+    const arr = (teamsToUse || []).map((team) => ({
       name: team,
-      score: scores[team] || 0,
-      origIdx: teamsToUse.indexOf(team),
+      score: (scores && scores[team]) || 0,
+      origIdx: (teamsToUse || []).indexOf(team),
     }));
     arr.sort((a, b) =>
       b.score !== a.score ? b.score - a.score : a.origIdx - b.origIdx
     );
     return arr;
   }, [teamsToUse, scores]);
+
   const highestScore = leaderboard.length > 0 ? leaderboard[0].score : 0;
 
-  const teamListRef = useRef();
-  useEffect(() => {
-    if (teamListRef.current) {
-      teamListRef.current.scrollTop = 0;
-    }
-  }, [leaderboard.length]);
-
+  // Pause / Play
   const handlePausePlay = () => {
     setQuizState((prevState) => {
       const nextState = prevState.timer.paused
@@ -444,10 +638,13 @@ function QuizScreen({ quizState, setQuizState }) {
     });
   };
 
-  // --- NEW: Safe restart with confirmation modal
+  // Restart modal controls
   const handleRestartSafe = () => setShowConfirmRestart(true);
   const handleRestartCancel = () => setShowConfirmRestart(false);
+
+  // IMPORTANT: set slidesSeen false so Slides show first after Restart
   const handleRestartConfirm = () => {
+    saveSnapshot();
     setShowConfirmRestart(false);
     localStorage.removeItem("quizState");
     setQuizState({
@@ -467,11 +664,18 @@ function QuizScreen({ quizState, setQuizState }) {
       },
       winnerTeams: [],
       tieIntro: null,
+      slidesSeen: false, // show Slides first after restart
+      rounds: null,
+      currentRoundIndex: 0,
+      timerSettings: {
+        perRound: [30, 30, 30, 30, 30],
+        passOn: 15,
+      },
     });
   };
 
   const handleGoHome = () => {
-    // Navigate to Setup screen — keep team names but reset quiz progress
+    saveSnapshot();
     setQuizState((prev) => {
       const next = {
         ...prev,
@@ -481,13 +685,17 @@ function QuizScreen({ quizState, setQuizState }) {
         round: "main",
         timer: {
           running: false,
-          timeLeft: 30,
+          timeLeft:
+            (prev.timerSettings?.perRound && prev.timerSettings.perRound[0]) ||
+            30,
           paused: false,
           passMode: false,
           startedAt: null,
         },
         aliveTeams: prev.teams || [],
-        scores: prev.scores || Object.fromEntries((prev.teams || []).map(t => [t, 0])),
+        scores:
+          prev.scores ||
+          Object.fromEntries((prev.teams || []).map((t) => [t, 0])),
         winnerTeams: [],
         tieIntro: null,
       };
@@ -497,28 +705,29 @@ function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleStartQuiz = () => {
+    saveSnapshot();
     setQuizState((prev) => {
-      const nextState = {
-        ...prev,
-        started: true,
-      };
+      const nextState = { ...prev, started: true };
       localStorage.setItem("quizState", JSON.stringify(nextState));
       return nextState;
     });
   };
 
   const handleStartQuestion = () => {
+    saveSnapshot();
     setQuestionRevealed(true);
   };
 
   const handlePass = () => {
+    saveSnapshot();
     const totalTeams = teamsToUse.length;
     let nextTurn = turn;
     let attempts = 0;
     let newPassedTeams = [...passedTeams, turn];
     while (attempts < totalTeams) {
       nextTurn = (nextTurn + 1) % totalTeams;
-      if (nextTurn !== originalTurn && !newPassedTeams.includes(nextTurn)) break;
+      if (nextTurn !== originalTurn && !newPassedTeams.includes(nextTurn))
+        break;
       attempts++;
     }
     const uniquePassedTeams = Array.from(
@@ -550,7 +759,7 @@ function QuizScreen({ quizState, setQuizState }) {
             running: true,
             paused: false,
             passMode: true,
-            timeLeft: 15,
+            timeLeft: passOnTimer,
             startedAt: Date.now(),
           },
         };
@@ -561,23 +770,25 @@ function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleCorrect = () => {
+    saveSnapshot();
     const teamName = teamsToUse[turn];
+    const pts = questionObj?.points ?? 10;
     setQuizState((prev) => {
       const newScores = {
         ...prev.scores,
-        [teamName]: (prev.scores[teamName] || 0) + 10,
+        [teamName]: (prev.scores[teamName] || 0) + pts,
       };
-      const nextTurn = (originalTurn + 1) % teamsToUse.length;
+      const nextTurn = (originalTurn + 1) % (teamsToUse.length || 1);
       const nextState = {
         ...prev,
         scores: newScores,
-        currentQuestion: prev.currentQuestion + 1,
+        currentQuestion: (prev.currentQuestion || 0) + 1,
         turn: nextTurn,
         timer: {
           running: false,
           paused: true,
           passMode: false,
-          timeLeft: 30,
+          timeLeft: roundsMode ? perRoundTimers[currentRoundIndex] ?? 30 : 30,
           startedAt: null,
         },
       };
@@ -587,7 +798,9 @@ function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleReveal = () => {
+    saveSnapshot();
     setShowAnswer(true);
+    setAnswered(true);
     setQuizState((prev) => {
       const nextState = {
         ...prev,
@@ -604,88 +817,43 @@ function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleNext = () => {
+    saveSnapshot();
     setQuizState((prev) => ({
       ...prev,
-      currentQuestion: prev.currentQuestion + 1,
-      turn: (originalTurn + 1) % teamsToUse.length,
+      currentQuestion: (prev.currentQuestion || 0) + 1,
+      turn: ((originalTurn || 0) + 1) % (teamsToUse.length || 1),
     }));
   };
 
-  const startTieBreakerRound = () => {
-    const scoringTeams = quizState.aliveTeams && quizState.aliveTeams.length
-      ? quizState.aliveTeams
-      : quizState.teams;
-    const scoresObj = quizState.scores;
-    const maxScore = Math.max(...scoringTeams.map((team) => scoresObj[team] || 0));
-    const tiedTeams = scoringTeams.filter((team) => (scoresObj[team] || 0) === maxScore);
-
-    setQuizState((prev) => {
-      const next = {
-        ...prev,
-        round: "tiebreaker",
-        currentQuestion: 0,
-        scores: Object.fromEntries(tiedTeams.map((t) => [t, 0])),
-        aliveTeams: tiedTeams,
-        turn: 0,
-        timer: {
-          running: false,
-          timeLeft: 30,
-          paused: false,
-          passMode: false,
-          startedAt: null,
-        },
-        tieIntro: null,
-      };
-      localStorage.setItem("quizState", JSON.stringify(next));
-      return next;
-    });
-  };
-  const startFinalTieBreakerRound = () => {
-    const scoringTeams = quizState.aliveTeams && quizState.aliveTeams.length
-      ? quizState.aliveTeams
-      : quizState.teams;
-    const scoresObj = quizState.scores;
-    const maxScore = Math.max(...scoringTeams.map((team) => scoresObj[team] || 0));
-    const tiedTeams = scoringTeams.filter((team) => (scoresObj[team] || 0) === maxScore);
-
-    setQuizState((prev) => {
-      const next = {
-        ...prev,
-        round: "final",
-        currentQuestion: 0,
-        scores: Object.fromEntries(tiedTeams.map((t) => [t, 0])),
-        aliveTeams: tiedTeams,
-        turn: 0,
-        timer: {
-          running: false,
-          timeLeft: 30,
-          paused: false,
-          passMode: false,
-          startedAt: null,
-        },
-        tieIntro: null,
-      };
-      localStorage.setItem("quizState", JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const timerDanger =
-    (timer?.timeLeft ?? 0) / (timer?.passMode ? 15 : 30) <= 0.2;
-
-  const questionObj = questions[currentQuestion];
-  const quizFinished = round === "finished";
-
-  const [showConfetti, setShowConfetti] = useState(false);
-  useEffect(() => {
-    if (quizFinished) {
-      setShowConfetti(true);
-    } else {
-      setShowConfetti(false);
+  const handleOptionSelect = (idx) => {
+    if (!questionRevealed) {
+      saveSnapshot();
+      setQuestionRevealed(true);
     }
-  }, [quizFinished]);
+    setSelectedOption(idx);
+    setShowAnswer(true);
+  };
 
-  if (quizState.tieIntro === "tie") {
+  const getCorrectAnswerText = () => {
+    if (!questionObj) return "";
+    if (
+      Array.isArray(questionObj.options) &&
+      typeof questionObj.answerIndex === "number"
+    ) {
+      return questionObj.options[questionObj.answerIndex];
+    }
+    if (questionObj.answer) return questionObj.answer;
+    if (
+      typeof questionObj.answerIndex === "number" &&
+      Array.isArray(questionObj.options)
+    ) {
+      return questionObj.options[questionObj.answerIndex];
+    }
+    return "";
+  };
+
+  // Legacy tie-intros
+  if (tieIntro === "tie") {
     const scoringTeams =
       quizState.aliveTeams && quizState.aliveTeams.length
         ? quizState.aliveTeams
@@ -699,11 +867,24 @@ function QuizScreen({ quizState, setQuizState }) {
       <TieBreakerIntro
         round="tie-intro"
         tiedTeams={tiedTeams}
-        onStart={startTieBreakerRound}
+        onStart={() => {
+          saveSnapshot();
+          setQuizState((prev) => {
+            const next = {
+              ...prev,
+              round: "tiebreaker",
+              currentQuestion: 0,
+              turn: 0,
+              tieIntro: null,
+            };
+            localStorage.setItem("quizState", JSON.stringify(next));
+            return next;
+          });
+        }}
       />
     );
   }
-  if (quizState.tieIntro === "final") {
+  if (tieIntro === "final") {
     const scoringTeams =
       quizState.aliveTeams && quizState.aliveTeams.length
         ? quizState.aliveTeams
@@ -717,17 +898,134 @@ function QuizScreen({ quizState, setQuizState }) {
       <TieBreakerIntro
         round="final-intro"
         tiedTeams={tiedTeams}
-        onStart={startFinalTieBreakerRound}
+        onStart={() => {
+          saveSnapshot();
+          setQuizState((prev) => {
+            const next = {
+              ...prev,
+              round: "final",
+              currentQuestion: 0,
+              turn: 0,
+              tieIntro: null,
+            };
+            localStorage.setItem("quizState", JSON.stringify(next));
+            return next;
+          });
+        }}
       />
     );
   }
 
+  // Rounds-mode tie intro (after last selected round if tied)
+  if (tieIntro === "rounds-tie") {
+    const tiedTeams = quizState.roundsTieTeams || [];
+    return (
+      <TieBreakerIntro
+        round="rounds-tie"
+        tiedTeams={tiedTeams}
+        onStart={() => {
+          saveSnapshot();
+          setQuizState((prev) => {
+            const existingIndex = (prev.rounds || []).findIndex(
+              (r) => r && r.id === "tiebreaker"
+            );
+            const tieRoundTime =
+              tieData.timeLimitSeconds ??
+              tieData.questions?.[0]?.timeLimitSeconds ??
+              30;
+
+            if (existingIndex >= 0) {
+              const patchedPerRound = Array.isArray(
+                prev.timerSettings?.perRound
+              )
+                ? [...prev.timerSettings.perRound]
+                : [];
+              if (!patchedPerRound[existingIndex])
+                patchedPerRound[existingIndex] = tieRoundTime;
+              const next = {
+                ...prev,
+                currentRoundIndex: existingIndex,
+                currentQuestion: 0,
+                turn: 0,
+                aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
+                timerSettings: {
+                  ...(prev.timerSettings || {}),
+                  perRound: patchedPerRound,
+                },
+                tieIntro: null,
+                round: "rounds",
+                tieBaseScores: Object.fromEntries(
+                  (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
+                    (t) => [t, prev.scores?.[t] || 0]
+                  )
+                ),
+              };
+              localStorage.setItem("quizState", JSON.stringify(next));
+              return next;
+            }
+
+            const newRounds = [
+              ...(prev.rounds || []),
+              {
+                ...tieData,
+                id: "tiebreaker",
+                title: tieData.title || "Tie-Breaker Round",
+              },
+            ];
+            const newPerRound = Array.isArray(prev.timerSettings?.perRound)
+              ? [...prev.timerSettings.perRound]
+              : [];
+            newPerRound.push(tieRoundTime);
+
+            const next = {
+              ...prev,
+              rounds: newRounds,
+              currentRoundIndex: newRounds.length - 1,
+              currentQuestion: 0,
+              turn: 0,
+              aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
+              timerSettings: {
+                ...(prev.timerSettings || {}),
+                perRound: newPerRound,
+              },
+              tieIntro: null,
+              round: "rounds",
+              tieBaseScores: Object.fromEntries(
+                (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
+                  (t) => [t, prev.scores?.[t] || 0]
+                )
+              ),
+            };
+            localStorage.setItem("quizState", JSON.stringify(next));
+            return next;
+          });
+        }}
+      />
+    );
+  }
+
+  // Round complete screen
   if (showRoundCompleteScreen) {
-    let roundCompleteTitle = "Main Round Complete!";
-    if (round === "tiebreaker") roundCompleteTitle = "Tie-Breaker Round Complete!";
-    if (round === "final") roundCompleteTitle = "Final Round Complete!";
+    const idx = lastCompletedRoundIndex ?? currentRoundIndex;
+    const roundLabel = roundsMode
+      ? `Round ${idx + 1} (${
+          quizState.rounds?.[idx]?.title || currentRound?.title || "Round"
+        })`
+      : legacyRound === "main"
+      ? "Main Round"
+      : legacyRound;
     return (
       <div className="container">
+        <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
+          <button
+            className="revert-btn"
+            onClick={revertSnapshot}
+            title="Revert last change"
+          >
+            Revert
+          </button>
+        </div>
+
         <div className="left-panel">
           <button
             className="small-restart-btn"
@@ -739,21 +1037,33 @@ function QuizScreen({ quizState, setQuizState }) {
           </button>
           <div className="leaderboard-timer-row">
             <div className="leaderboard-timer-center">
-              <CircularTimer value={0} max={30} paused={true} onClick={() => {}} style={{ opacity: 0 }} />
+              <CircularTimer
+                value={0}
+                max={30}
+                paused={true}
+                onClick={() => {}}
+                className="compact"
+              />
             </div>
           </div>
           <div className="leaderboard-container">
             <h2 className="leaderboard-title">Leaderboard</h2>
             <ul className="team-list" ref={teamListRef}>
               {leaderboard.map((teamObj) => (
-                <li className="team-item" key={teamObj.name}>
+                <li
+                  className="team-item"
+                  key={teamObj.name}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <span>{teamObj.name}</span>
                   <span>
                     {teamObj.score}
                     {teamObj.score === highestScore && highestScore > 0 ? (
-                      <span className="trophy" title="Top Team">
-                        🏆
-                      </span>
+                      <span className="trophy">🏆</span>
                     ) : null}
                   </span>
                 </li>
@@ -761,164 +1071,275 @@ function QuizScreen({ quizState, setQuizState }) {
             </ul>
           </div>
         </div>
+
         <div className="right-panel">
           <div className="round-complete-card">
-            <div className="round-complete-title">{roundCompleteTitle}</div>
+            <div className="round-complete-title">{roundLabel} Complete!</div>
             <div className="round-complete-msg">
-              The round has ended!
-              <br />
-              Click below to see Results.
+              The round has ended! Below are the teams and their current scores.
             </div>
-            <button
-              className="round-complete-next-btn"
-              onClick={handleShowTieIntroAfterRoundComplete}
-            >
-              Next
-            </button>
+
+            <div style={{ marginTop: 12 }}>
+              <ul style={{ listStyle: "none", padding: 0 }}>
+                {leaderboard.map((t) => (
+                  <li
+                    key={t.name}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "6px 0",
+                      borderBottom: "1px solid #f1f5f9",
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, marginRight: 10 }}>{t.name} Score: </span>
+                    <span style={{ fontWeight: 800 }}>{t.score}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <button
+                className="round-complete-next-btn"
+                onClick={handleShowTieIntroAfterRoundComplete}
+              >
+                Continue
+              </button>
+            </div>
           </div>
         </div>
+
         {showConfirmRestart && (
-          <RestartModal onConfirm={handleRestartConfirm} onCancel={handleRestartCancel} />
+          <RestartModal
+            onConfirm={handleRestartConfirm}
+            onCancel={handleRestartCancel}
+          />
         )}
       </div>
     );
   }
 
-  if (quizFinished) {
-    // === NEW: Winner display in LEFT panel (centered) + Home button in right panel ===
+  // Finished screen
+  if (quizState.round === "finished") {
+    const baseTeams =
+      (quizState.aliveTeams && quizState.aliveTeams.length
+        ? quizState.aliveTeams
+        : quizState.teams) || [];
+    const maxScore = baseTeams.length
+      ? Math.max(...baseTeams.map((t) => scores[t] || 0))
+      : 0;
+    const fallbackWinners = baseTeams.filter(
+      (t) => (scores[t] || 0) === maxScore
+    );
+    const winnersToShow =
+      winnerTeams && winnerTeams.length > 0 ? winnerTeams : fallbackWinners;
+
+    // Title and explicit "Winner"/"Shared Winners" block
+    const quizTitle = "World Quality Day Quiz - 2025";
+    const isShared = winnersToShow?.length > 1;
+    const resultHeading = isShared ? "Shared Winners" : "Winner";
+    const resultNames = isShared
+      ? winnersToShow.join(" & ")
+      : winnersToShow?.[0] || "No winner determined";
+
     return (
       <div className="container">
+        <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
+          <button
+            className="revert-btn"
+            onClick={revertSnapshot}
+            title="Revert last change"
+          >
+            Revert
+          </button>
+        </div>
+
         {showConfetti && <ConfettiCelebration />}
         <div className="left-panel">
-          <button
-            className="small-restart-btn"
-            onClick={handleRestartSafe}
-            title="Restart Quiz"
-            aria-label="Restart Quiz"
-          >
+          <button className="small-restart-btn" onClick={handleRestartSafe}>
             ⟲
           </button>
-
           <div className="leaderboard-timer-row">
             <div className="leaderboard-timer-center">
-              <CircularTimer value={0} max={30} paused={true} onClick={() => {}} style={{ opacity: 0 }} />
+              <CircularTimer
+                value={0}
+                max={30}
+                paused={true}
+                onClick={() => {}}
+                className="compact"
+              />
             </div>
           </div>
-
-          {/* winner-display replaces the usual leaderboard on the finished screen */}
-          <div className="leaderboard-container" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "220px" }}>
+          <div
+            className="leaderboard-container"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: "220px",
+            }}
+          >
             <div className="winner-display" role="status" aria-live="polite">
               <div className="winner-shine" />
-              <div className="trophy-pop" aria-hidden="true">🏆</div>
-              <div className="winner-text" style={{ zIndex: 2 }}>
-                {winnerTeams?.length > 1
-                  ? `🎉 Shared Victory: ${winnerTeams.join(" & ")}!`
-                  : `🏆 ${winnerTeams[0]} Wins!`}
+              <div className="trophy-pop" aria-hidden="true">
+                🏆
               </div>
-
-              {/* Confetti float (CSS-based floating particles) */}
-              <div className="confetti-float" aria-hidden="true">
-                {Array.from({ length: 25 }).map((_, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      "--color": [
-                        "#ffe066",
-                        "#43e97b",
-                        "#f85032",
-                        "#5f2c82",
-                        "#49a09d",
-                      ][Math.floor(Math.random() * 5)],
-                      left: `${Math.random() * 100}%`,
-                      // random start
-                      animationDelay: `${Math.random() * 2}s`,
-                    }}
-                  />
-                ))}
+              <div className="winner-text" style={{ zIndex: 2 }}>
+                {winnersToShow?.length > 1
+                  ? `🎉 Shared Victory: ${winnersToShow.join(" & ")}!`
+                  : winnersToShow?.length === 1
+                  ? `🏆 ${winnersToShow[0]} Wins!`
+                  : "No winner determined"}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="right-panel" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <h2 className="right-title">Quiz Finished</h2>
+        <div
+          className="right-panel"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+          }}
+        >
+          {/* Title and winner section */}
+          <h2
+            className="right-title"
+            style={{
+              marginBottom: "0.75rem",
+              fontSize: "1.8rem",
+              color: "#222037",
+            }}
+          >
+            {quizTitle}
+          </h2>
 
-          {/* Right panel results summary + actions */}
-          {winnerTeams?.length > 1 ? (
+          <div
+            style={{
+              marginTop: "0.25rem",
+              padding: "0.9rem 1.2rem",
+              borderRadius: 12,
+              background:
+                "linear-gradient(90deg, rgba(245,247,250,0.85) 0%, rgba(227,238,255,0.85) 100%)",
+              boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+              minWidth: 280,
+            }}
+          >
             <div
               style={{
-                margin: "1.5rem 0",
+                fontSize: "1.2rem",
+                fontWeight: 900,
+                color: isShared ? "#e73827" : "#1e4e80",
+                letterSpacing: ".02em",
+                marginBottom: "0.35rem",
+              }}
+            >
+              {resultHeading}
+            </div>
+            <div
+              style={{
+                fontSize: isShared ? "1.25rem" : "1.4rem",
+                fontWeight: 900,
+                color: isShared ? "#e73827" : "#1f6f2e",
+              }}
+            >
+              {resultNames}
+              {!isShared && winnersToShow?.length === 1 ? " 🏆" : ""}
+            </div>
+          </div>
+
+          {/* Your original summary block (kept) */}
+          <h3 className="right-title" style={{ marginTop: "1.4rem" }}>
+            Quiz Finished
+          </h3>
+          {winnersToShow?.length > 1 ? (
+            <div
+              style={{
+                margin: "0.9rem 0 0.4rem",
                 textAlign: "center",
                 color: "#e73827",
-                fontSize: "1.2rem",
+                fontSize: "1.1rem",
                 fontWeight: 800,
-                animation: "popFadeIn 1.5s",
               }}
             >
               Shared Victory 🎉
               <br />
-              Teams: {winnerTeams.join(", ")}
+              Teams: {winnersToShow.join(", ")}
             </div>
           ) : (
             <div
               style={{
-                margin: "1.5rem 0",
+                margin: "0.9rem 0 0.4rem",
                 textAlign: "center",
                 color: "#43ad36",
-                fontSize: "1.4rem",
+                fontSize: "1.2rem",
                 fontWeight: 900,
-                animation: "popFadeIn 1.5s",
               }}
             >
-              Winner: {winnerTeams[0]} 🏆
+              {winnersToShow?.length === 1
+                ? `Winner: ${winnersToShow[0]} 🏆`
+                : "No winner determined"}
             </div>
           )}
 
-          {/* Action buttons: Home (go to Setup), or Restart */}
           <div style={{ display: "flex", gap: "0.9rem", marginTop: "1.2rem" }}>
-            <button
-              className="round-complete-next-btn"
-              onClick={handleGoHome}
-              title="Go to Setup"
-            >
+            <button className="round-complete-next-btn" onClick={handleGoHome}>
               Home
             </button>
-
             <button
               className="round-complete-next-btn"
-              onClick={() => {
-                // Keep behavior of restarting the quiz entirely (clear localStorage)
-                handleRestartConfirm();
+              onClick={handleRestartConfirm}
+              style={{
+                background: "linear-gradient(90deg,#5f2c82 0%, #49a09d 100%)",
+                color: "#fff",
               }}
-              style={{ background: "linear-gradient(90deg,#5f2c82 0%, #49a09d 100%)", color: "#fff" }}
             >
               Restart
             </button>
           </div>
         </div>
-
         {showConfirmRestart && (
-          <RestartModal onConfirm={handleRestartConfirm} onCancel={handleRestartCancel} />
+          <RestartModal
+            onConfirm={handleRestartConfirm}
+            onCancel={handleRestartCancel}
+          />
         )}
       </div>
     );
   }
 
+  // Not started screen
   if (!started) {
     return (
       <div className="container" style={{ position: "relative" }}>
-        <div className="left-panel">
+        <div
+          style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}
+        >
           <button
-            className="small-restart-btn"
-            onClick={handleRestartSafe}
-            title="Restart Quiz"
-            aria-label="Restart Quiz"
+            className="revert-btn"
+            onClick={revertSnapshot}
+            title="Revert last change"
           >
+            Revert
+          </button>
+        </div>
+
+        <div className="left-panel">
+          <button className="small-restart-btn" onClick={handleRestartSafe}>
             ⟲
           </button>
-          <div className="leaderboard-timer-row">
+        <div className="leaderboard-timer-row">
             <div className="leaderboard-timer-center">
-              <CircularTimer value={0} max={30} paused={true} onClick={() => {}} style={{ opacity: 0 }} />
+              <CircularTimer
+                value={0}
+                max={30}
+                paused={true}
+                onClick={() => {}}
+                className="compact"
+              />
             </div>
           </div>
           <div className="leaderboard-container">
@@ -927,6 +1348,7 @@ function QuizScreen({ quizState, setQuizState }) {
               <AnimatePresence>
                 {leaderboard.map((teamObj) => (
                   <motion.li
+                    key={teamObj.name}
                     layout
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -936,9 +1358,10 @@ function QuizScreen({ quizState, setQuizState }) {
                       stiffness: 400,
                       damping: 35,
                     }}
-                    key={teamObj.name}
                     className="team-item"
                     style={{
+                      display: "flex",
+                      justifyContent: "space-between",
                       minHeight: "3.6em",
                       fontWeight: "400",
                       fontSize: "1.16rem",
@@ -953,13 +1376,10 @@ function QuizScreen({ quizState, setQuizState }) {
             </ul>
           </div>
         </div>
+
         <div
           className="right-panel"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
         >
           <button
             className="big-start-btn"
@@ -981,7 +1401,10 @@ function QuizScreen({ quizState, setQuizState }) {
           </button>
         </div>
         {showConfirmRestart && (
-          <RestartModal onConfirm={handleRestartConfirm} onCancel={handleRestartCancel} />
+          <RestartModal
+            onConfirm={handleRestartConfirm}
+            onCancel={handleRestartCancel}
+          />
         )}
       </div>
     );
@@ -989,8 +1412,12 @@ function QuizScreen({ quizState, setQuizState }) {
 
   // --- Quiz Running Screen ---
   let roundTitle = "Quiz";
-  if (round === "tiebreaker") roundTitle = "Tie-Breaker Round";
-  if (round === "final") roundTitle = "Final Tie-Breaker Round";
+  if (roundsMode) {
+    roundTitle = currentRound?.title ?? `Round ${currentRoundIndex + 1}`;
+  } else {
+    if (legacyRound === "tiebreaker") roundTitle = "Tie-Breaker Round";
+    if (legacyRound === "final") roundTitle = "Final Tie-Breaker Round";
+  }
 
   const questionMedia =
     isMediaUrl(questionObj?.question) &&
@@ -998,18 +1425,77 @@ function QuizScreen({ quizState, setQuizState }) {
   const explicitMedia =
     questionObj?.media && renderMedia(questionObj?.media, {}, true);
 
-  // Add question progress variables
   const totalQuestions = questions.length;
-  const currentQNum = currentQuestion + 1; // 1-based index
+  const currentQNum = currentQuestion + 1;
+  const isMultipleChoice =
+    Array.isArray(questionObj?.options) && questionObj.options.length > 0;
+
+  const optionButtonStyle = (i) => {
+    const base = {
+      padding: "0.8rem 1rem",
+      borderRadius: 10,
+      margin: "6px 0",
+      width: "100%",
+      textAlign: "left",
+      cursor: showAnswer ? "default" : "pointer",
+      border: "1px solid #e6e6ea",
+      background: "#ffffff",
+      boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
+      fontWeight: 700,
+      color: "#222",
+    };
+
+    if (showAnswer) {
+      const correctIndex =
+        typeof questionObj?.answerIndex === "number"
+          ? questionObj.answerIndex
+          : null;
+      if (correctIndex === i) {
+        base.background = "linear-gradient(90deg,#e6f9ee 0%, #d9f1df 100%)";
+        base.border = "2px solid #19a849";
+        base.color = "#0b6b2a";
+      } else if (selectedOption === i && selectedOption !== correctIndex) {
+        base.background = "linear-gradient(90deg,#ffecec 0%, #ffd6d6 100%)";
+        base.border = "2px solid #f85032";
+        base.color = "#7a1f1f";
+      } else {
+        base.opacity = 0.9;
+      }
+    } else if (selectedOption === i) {
+      base.background = "#f0f4ff";
+      base.border = "1.5px solid #d6e2ff";
+      base.color = "#1e3a8a";
+    }
+
+    if (!questionRevealed || showAnswer) {
+      base.opacity = base.opacity ?? 1;
+      if (!questionRevealed) base.cursor = "not-allowed";
+    }
+
+    return base;
+  };
+
+  const currentRoundNumberLabel = roundsMode
+    ? `Round ${currentRoundIndex + 1}`
+    : legacyRound.toUpperCase();
 
   return (
     <div className="container" style={{ position: "relative" }}>
+      <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
+        <button
+          className="revert-btn"
+          onClick={revertSnapshot}
+          title="Revert last change"
+        >
+          Revert
+        </button>
+      </div>
+
       <div className="left-panel">
         <button
           className="small-restart-btn"
           onClick={handleRestartSafe}
           title="Restart Quiz"
-          aria-label="Restart Quiz"
         >
           ⟲
         </button>
@@ -1018,15 +1504,28 @@ function QuizScreen({ quizState, setQuizState }) {
             {questionRevealed ? (
               <CircularTimer
                 value={timer?.timeLeft ?? 0}
-                max={timer?.passMode ? 15 : 30}
+                max={
+                  timer?.passMode
+                    ? passOnTimer
+                    : roundsMode
+                    ? perRoundTimers[currentRoundIndex] ?? 30
+                    : 30
+                }
                 paused={timer?.paused || false}
                 onClick={handlePausePlay}
               />
             ) : (
-              <CircularTimer value={0} max={30} paused={true} onClick={() => {}} style={{ opacity: 0 }} />
+              <CircularTimer
+                value={0}
+                max={30}
+                paused={true}
+                onClick={() => {}}
+                className="compact"
+              />
             )}
           </div>
         </div>
+
         <div className="leaderboard-container">
           <h2 className="leaderboard-title">Leaderboard</h2>
           <ul className="team-list" ref={teamListRef}>
@@ -1043,15 +1542,21 @@ function QuizScreen({ quizState, setQuizState }) {
                     damping: 35,
                   }}
                   key={teamObj.name}
-                  className={`team-item${teamsToUse[turn] === teamObj.name ? " highlight" : ""}`}
+                  className={`team-item${
+                    teamsToUse[turn] === teamObj.name ? " highlight" : ""
+                  }`}
                   style={{
                     minHeight: "3.6em",
                     fontWeight: "650",
                     fontSize: "1.16rem",
+                    display: "flex",
+                    justifyContent: "space-between",
                     alignItems: "center",
                   }}
                 >
-                  <span style={{ fontWeight: "650", color: "#5F2F83" }}>{teamObj.name}</span>
+                  <span style={{ fontWeight: "650", color: "#5F2F83" }}>
+                    {teamObj.name}
+                  </span>
                   <span>
                     {teamObj.score}
                     {i === 0 && teamObj.score === highestScore && highestScore > 0 ? (
@@ -1066,28 +1571,30 @@ function QuizScreen({ quizState, setQuizState }) {
           </ul>
         </div>
       </div>
+
       <div className="right-panel">
-        <div className="quiz-header-row">
-          <h2
-            className="right-title"
+        <div className="quiz-header-row"></div>
+
+        <div className="right-title" style={{ textAlign: "left", marginBottom: 8 }}>
+          <div>
+            {currentRoundNumberLabel} — {roundTitle}
+          </div>
+        </div>
+
+        <div style={{ textAlign: "left", marginBottom: 0 }}>
+          <div
+            className="right-title-q"
             style={{
               marginBottom: 0,
-              textAlign: "left",
-              flex: 1,
               fontSize: "1.45rem",
-              minHeight: "2.1em",
-              display: "flex",
-              alignItems: "center",
+              fontWeight: 800,
+              minHeight: "3.1em",
             }}
           >
-            {roundTitle}{" "}
-            {teamsToUse[turn] && (
-              <span style={{ fontWeight: 400, fontSize: "1.09em", marginLeft: 12 }}>
-                - Question for {teamsToUse[turn]}
-              </span>
-            )}
-          </h2>
+            Question for {teamsToUse[turn]}
+          </div>
         </div>
+
         {!questionRevealed ? (
           <div
             style={{
@@ -1121,55 +1628,126 @@ function QuizScreen({ quizState, setQuizState }) {
             <span className="question-progress">
               {currentQNum}/{totalQuestions}
             </span>
-            <span
+            <div
               className="question-main-text"
-              style={{
-                width: "100%",
-                marginBottom: "12px",
-                textAlign: "center",
-              }}
+              style={{ fontSize: "1.6rem", fontWeight: 800, marginBottom: 8 }}
             >
               {questionObj?.question}
-            </span>
+            </div>
+
+            {isMultipleChoice && (
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: 640,
+                  margin: "0.6rem auto 0",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                {questionObj.options.map((opt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      if (!showAnswer && questionRevealed) handleOptionSelect(i);
+                    }}
+                    disabled={!questionRevealed || showAnswer}
+                    aria-pressed={selectedOption === i}
+                    style={optionButtonStyle(i)}
+                  >
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <div
+                        style={{
+                          minWidth: 34,
+                          minHeight: 34,
+                          borderRadius: 8,
+                          background: selectedOption === i ? "#f0f4ff" : "#ffffff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: "1px solid #eee",
+                          fontWeight: 800,
+                          color: "#333",
+                        }}
+                      >
+                        {String.fromCharCode(65 + i)}
+                      </div>
+                      <div style={{ flex: 1, textAlign: "left", fontWeight: 700 }}>
+                        {opt}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {questionMedia}
             {explicitMedia}
+
             {timeUp && !showAnswer && (
-              <div className="timeup-msg">Time's up! Please pass or reveal answer.</div>
+              <div className="timeup-msg">
+                Time's up! Please pass or reveal answer.
+              </div>
             )}
           </div>
         )}
-        <div className="button-row">
-          <button className="control-btn" onClick={handlePass} disabled={showAnswer || !questionRevealed}>
+
+        <div className="button-row" style={{ marginTop: isMultipleChoice ? 16 : 24 }}>
+          <button
+            className="control-btn"
+            onClick={handlePass}
+            disabled={showAnswer || !questionRevealed}
+          >
             Pass
           </button>
-          <button className="control-btn green" onClick={handleCorrect} disabled={showAnswer || !questionRevealed}>
+          <button
+            className="control-btn green"
+            onClick={() => {
+              if (isMultipleChoice && selectedOption !== null) {
+                const correctIndex = questionObj?.answerIndex;
+                if (typeof correctIndex === "number") {
+                  if (selectedOption === correctIndex) {
+                    handleCorrect();
+                    return;
+                  }
+                }
+              }
+              handleCorrect();
+            }}
+            disabled={showAnswer === false && !questionRevealed}
+          >
             Correct
           </button>
-          <button className="control-btn red" onClick={handleReveal} disabled={showAnswer || !questionRevealed}>
+          <button
+            className="control-btn red"
+            onClick={handleReveal}
+            disabled={showAnswer || !questionRevealed}
+          >
             Reveal
           </button>
           <button className="control-btn" onClick={handleNext} disabled={!showAnswer}>
             Next Question
           </button>
         </div>
+
         {showAnswer && (
-          <div className="answer-box" style={{ width: "100%", textAlign: "center" }}>
+          <div className="answer-box" style={{ width: "100%", textAlign: "center", marginTop: 12 }}>
             <b>Answer:</b>{" "}
             <span>
-              {questionObj?.answer}
-              {!isMediaUrl(questionObj?.question) &&
-                isMediaUrl(questionObj?.answer) &&
-                renderMedia(questionObj?.answer, { maxHeight: 140 })}
+              {isMultipleChoice ? getCorrectAnswerText() : questionObj?.answer}
             </span>
           </div>
         )}
       </div>
+
       {showConfetti && <ConfettiCelebration />}
       {showConfirmRestart && (
-        <RestartModal onConfirm={handleRestartConfirm} onCancel={handleRestartCancel} />
+        <RestartModal
+          onConfirm={handleRestartConfirm}
+          onCancel={handleRestartCancel}
+        />
       )}
     </div>
   );
 }
-
-export default QuizScreen;

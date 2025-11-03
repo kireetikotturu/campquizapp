@@ -1,0 +1,23 @@
+{
+  "round": 3,
+  "title": "General Knowledge (Logos, Captions, images, etc.)",
+  "description": "Visual and caption-based general knowledge.",
+  "pass_on": false,
+  "questions": [
+    {
+      "question": "Identify this monument:",
+      "media": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+      "answer": "Taj Mahal"
+    },
+    {
+      "question": "Caption: \"A man holding a golden trophy\" — Which award ceremony is likely shown?",
+      "media": "",
+      "answer": "Academy Awards"
+    },
+    {
+      "question": "Which logo belongs to Apple?",
+      "media": "https://res.cloudinary.com/demo/image/upload/logo-example.png",
+      "answer": "Apple"
+    }
+  ]
+}
