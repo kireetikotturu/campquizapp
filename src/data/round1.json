@@ -1,24 +1,68 @@
 {
   "round": 1,
-  "title": "Science and Technology (Multiple Choice - No Pass-on)",
+  "title": "Sports & Science",
   "type": "multiple_choice",
   "pass_on": false,
   "questions": [
     {
       "id": "r1q1",
-      "question": "What is the chemical symbol for gold?",
-      "options": ["Ag", "Au", "Gd", "Go"],
-      "answerIndex": 1,
+      "question": "What is the name of India’s first indigenously developed antibiotic targeting antimicrobial resistance (AMR)?",
+      "options": ["Azithromycin", "Ciprofloxacin", "Nafithromycin", "Amoxicillin"],
+      "answerIndex": 2,
       "timeLimitSeconds": 20,
       "points": 10
     },
     {
       "id": "r1q2",
-      "question": "Which company created the Rust programming language?",
-      "options": ["Google", "Microsoft", "Mozilla", "Facebook"],
+      "question": "MeerKAT radio telescope, which was seen in the news, is located in which country?",
+      "options": ["New Zealand", "South Africa", "Australia", "India"],
+      "answerIndex": 1,
+      "timeLimitSeconds": 20,
+      "points": 10
+    },
+    {
+      "id": "r1q3",
+      "question": "Who among the following used the term computer worm for the first time?",
+      "options": ["John Brunner", "Alan Turing", "John McCarthy", "JP Eckert"],
+      "answerIndex": 0,
+      "timeLimitSeconds": 20,
+      "points": 10
+    },
+    {
+      "id": "r1q4",
+      "question": "The world’s largest solar tree in India has been developed by which institution?",
+      "options": ["CSIR", "ISRO", "IISC", "IIT Bombay"],
+      "answerIndex": 0,
+      "timeLimitSeconds": 20,
+      "points": 10
+    },
+    {
+      "id": "r1q5",
+      "question": "Which technology giant is going to set up a Center of Excellence for AI (Artificial Intelligence) along with GeM?",
+      "options": ["Microsoft", "Infosys", "IBM", "APPLE"],
       "answerIndex": 2,
       "timeLimitSeconds": 20,
       "points": 10
+    },
+    {
+      "question": "National Sports Day 2025 in India is dedicated to which legendary player?",
+      "answer": "Major Dhyan Chand"
+    },
+    {
+      "question": "“Perfect 10” is the word used in Cricket for which performance?",
+      "answer": "Bowler taking 10 Wickets in an innings. "
+    },
+    {
+      "question": "Which hockey player received the Major Dhyan Chand Khel Ratna Award 2024?",
+      "answer": "Harmanpreet Singh"
+    },
+    {
+      "question": "Ms. N. Usha won the Dhyan Chand Award in the recently announced National Sports Awards of 2020 in which Sport?",
+      "answer": "Boxing"
+    },
+    {
+      "question": "When was Kabaddi included in Asian Games?",
+      "answer": "1990"
     }
   ]
 }

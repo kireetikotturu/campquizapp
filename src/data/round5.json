@@ -1,18 +1,33 @@
 {
   "round": 5,
-  "title": "Sports and Awards",
-  "description": "Questions about sports events and awards.",
+  "title": "Movies & Entertainment",
+  "description": "Questions about Movies, events and More.",
   "pass_on": false,
   "questions": [
     {
-      "question": "Which country won the FIFA World Cup in 2018?",
+      "question": "Which Telugu film won the National Film Award for Best Feature Film in Telugu in 2017?",
       "media": "",
-      "answer": "France"
+      "answer": "Pelli Choopulu"
     },
     {
-      "question": "Who holds the most Grand Slam singles titles (men) as of 2024?",
+      "question": "Which film was selected as India's official entry for Oscar 2025?",
       "media": "",
-      "answer": "Novak Djokovic"
+      "answer": "Laapataa Ladies"
+    },
+    {
+      "question": "Find the Movie name?",
+      "media": "https://res.cloudinary.com/dlz2pxovx/image/upload/v1762273857/Screenshot_2025-11-04_215958_aw2pql.png",
+      "answer": "Jayammu Nischayammu Raa"
+    },
+    {
+      "question": "Guess the song?",
+      "media": "https://res.cloudinary.com/dlz2pxovx/image/upload/v1762273981/Screenshot_2025-11-04_220208_v2hg3l.png",
+      "answer": "Akasam badhalaina sound gundellona..moguthundi ninnu kalisaka"
+    },
+    {
+      "question": "Guess the song?",
+      "media": "https://res.cloudinary.com/dlz2pxovx/image/upload/v1762274037/Screenshot_2025-11-04_220315_vtte6h.png",
+      "answer": "Chitti naa bull bull chitti"
     }
   ]
 }

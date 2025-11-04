@@ -1,18 +1,33 @@
 {
   "round": 4,
-  "title": "Movies & Entertainment",
-  "description": "Film and pop culture questions.",
+  "title": "General Knowledge",
+  "description": "Pass-on round — strategic passing allowed.",
   "pass_on": false,
   "questions": [
     {
-      "question": "Who directed the movie 'Inception'?",
+      "question": "Who painted the famous artwork ‘Mona Lisa’",
       "media": "",
-      "answer": "Christopher Nolan"
+      "answer": "Leonardo da Vinci"
     },
     {
-      "question": "Which movie won Best Picture at the Oscars in 2020?",
+      "question": "In which year did World War I begin?",
       "media": "",
-      "answer": "Parasite"
+      "answer": "1914"
+    },
+    {
+      "question": "Who was the first person to address the United Nations in Hindi?",
+      "media": "",
+      "answer": "Atal Bihari Vajpayee"
+    },
+    {
+      "question": "What was the name of the ship that Christopher Columbus used to reach America?",
+      "media": "",
+      "answer": "Santa Maria"
+    },
+    {
+      "question": "Who was the first education minister of independent India?",
+      "media": "",
+      "answer": "Maulana Abul Kalam Azad"
     }
   ]
 }
