@@ -1,4 +1,4 @@
-// Note: Full QuizScreen with all previous features preserved and fixes applied.
+// Note: Full QuizScreen with all previous features preserved and a password lock added.
 // Key features retained:
 // - Media shown BELOW question text, options below media.
 // - Bottom status line for "Time's up" and "Answer" (doesn't cover content).
@@ -8,16 +8,14 @@
 // - Manual timer start for the first team; auto-start on pass.
 // - Round-complete screen after each selected round to show scores and continue the flow.
 // - After all selected rounds: if tie -> single tie-breaker round; if tie persists after it -> Shared Winners and finish.
+// - Option click reveals the answer and pauses timer; Next enabled only after reveal.
+// - Dynamic tie-breaker questions: 2 teams => 4 questions; otherwise one per tied team; capped by JSON available.
 //
-// New in this version:
-// - Tie-breaker question count adapts to tied team count to avoid endless looping:
-//   • If 5 teams tied and tiebreaker JSON has 5 questions, use 5 (1 each).
-//   • If 3 teams tied, use 3 questions (1 each).
-//   • If 2 teams tied, use 4 questions (2 each).
-//   • Cap by available questions in tieData.
-// - Round-complete overlay will NOT appear for the tie-breaker round (prevents looping/re-running).
-// - Option click reveals the answer first and pauses the timer; "Next" is enabled only after reveal (unchanged).
-// - Auto-start Pass timer is guaranteed (interval re-inits on startedAt change).
+// NEW: Password Lock ("campq202530")
+// - When starting the quiz (pressing Start Quiz) a password is required (once per page load).
+// - While the quiz is ongoing (started and not finished), on any page refresh a password is required before viewing.
+// - The password prompt appears only on page load/refresh or when starting; once unlocked, it won't appear again until the next refresh.
+// - Timer is NOT forcibly modified by the lock; overlay blocks interaction and view until unlocked.
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -201,6 +199,73 @@ function RestartModal({ onConfirm, onCancel }) {
   );
 }
 
+function PasswordLockModal({
+  onSubmit,
+  onCancel,
+  error,
+}) {
+  const [pwd, setPwd] = useState("");
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(pwd);
+  };
+  return (
+    <div className="restart-modal-overlay" style={{ zIndex: 4000 }}>
+      <motion.div
+        className="restart-modal"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+        style={{ maxWidth: 460 }}
+      >
+        <div className="restart-modal-title">Unlock Quiz</div>
+        <div className="restart-modal-msg" style={{ marginBottom: 10 }}>
+          Enter the quiz password to continue.
+        </div>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="password"
+            placeholder="Enter password"
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #e6e6ea",
+              outline: "none",
+              fontSize: "1rem",
+              marginBottom: 10,
+            }}
+          />
+          {error ? (
+            <div
+              style={{
+                color: "#b91c1c",
+                fontWeight: 800,
+                fontSize: ".95rem",
+                marginBottom: 6,
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+          <div className="restart-modal-btn-row">
+            <button type="submit" className="restart-modal-btn confirm">
+              Unlock
+            </button>
+            <button type="button" className="restart-modal-btn" onClick={onCancel}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function QuizScreen({ quizState, setQuizState }) {
   // Inject scoped layout CSS
   const injectedLayoutCSS = `
@@ -270,6 +335,11 @@ export default function QuizScreen({ quizState, setQuizState }) {
   const [showConfirmRestart, setShowConfirmRestart] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
+  // Password lock state (memory only; resets on refresh)
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [showLock, setShowLock] = useState(false);
+  const [lockError, setLockError] = useState("");
+
   // Refs/timers
   const timerRef = useRef();
   const isFirstMount = useRef(true);
@@ -286,7 +356,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
   const deriveTieBreakerQuestions = (count) => {
     const all = (tieData && Array.isArray(tieData.questions)) ? tieData.questions : [];
     if (count <= 0) return [];
-    let desired = count === 2 ? 4 : count; // 2 teams -> 4 questions (2 each), else one per team
+    let desired = count === 2 ? 4 : count; // 2 teams -> 4 questions; otherwise one per team
     desired = Math.min(desired, all.length);
     return all.slice(0, desired);
   };
@@ -786,7 +856,43 @@ export default function QuizScreen({ quizState, setQuizState }) {
     });
   };
 
+  // Password lock helpers
+  const PASSWORD = "campq202530";
+
+  const requireLockNow =
+    (quizState.started && quizState.round !== "finished" && !isUnlocked);
+
+  // On initial load or whenever started status flips to ongoing, show lock (only if not unlocked yet)
+  useEffect(() => {
+    if (quizState.started && quizState.round !== "finished" && !isUnlocked) {
+      setLockError("");
+      setShowLock(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizState.started, quizState.round]);
+
+  const handleLockSubmit = (input) => {
+    if ((input || "").trim() === PASSWORD) {
+      setIsUnlocked(true);
+      setShowLock(false);
+      setLockError("");
+    } else {
+      setLockError("Incorrect password. Try again.");
+    }
+  };
+
+  const handleLockCancel = () => {
+    // Keep the lock open; optional behavior: allow cancel to just keep overlay
+    setShowLock(true);
+  };
+
   const handleStartQuiz = () => {
+    // Enforce password on quiz start
+    if (!isUnlocked) {
+      setLockError("");
+      setShowLock(true);
+      return;
+    }
     saveSnapshot("start-quiz");
     setQuizState((prev) => {
       const nextState = { ...prev, started: true };
@@ -1007,34 +1113,43 @@ export default function QuizScreen({ quizState, setQuizState }) {
     );
     const derivedQs = deriveTieBreakerQuestions(tiedTeams.length);
     return (
-      <TieBreakerIntro
-        round="tie-intro"
-        tiedTeams={tiedTeams}
-        onStart={() => {
-          saveSnapshot("start-legacy-tiebreaker");
-          setQuizState((prev) => {
-            const next = {
-              ...prev,
-              round: "tiebreaker",
-              currentQuestion: 0,
-              turn: 0,
-              tieIntro: null,
-              // store derived tie questions into legacy slot
-              tiebreaker: derivedQs,
-              aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
-              tieBaseScores: Object.fromEntries(
-                (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
-                  (t) => [t, prev.scores?.[t] || 0]
-                )
-              ),
-            };
-            try {
-              localStorage.setItem("quizState", JSON.stringify(next));
-            } catch {}
-            return next;
-          });
-        }}
-      />
+      <>
+        <TieBreakerIntro
+          round="tie-intro"
+          tiedTeams={tiedTeams}
+          onStart={() => {
+            saveSnapshot("start-legacy-tiebreaker");
+            setQuizState((prev) => {
+              const next = {
+                ...prev,
+                round: "tiebreaker",
+                currentQuestion: 0,
+                turn: 0,
+                tieIntro: null,
+                tiebreaker: derivedQs,
+                aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
+                tieBaseScores: Object.fromEntries(
+                  (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
+                    (t) => [t, prev.scores?.[t] || 0]
+                  )
+                ),
+              };
+              try {
+                localStorage.setItem("quizState", JSON.stringify(next));
+              } catch {}
+              return next;
+            });
+          }}
+        />
+        {/* Password lock overlay if needed */}
+        {quizState.started && quizState.round !== "finished" && showLock && !isUnlocked && (
+          <PasswordLockModal
+            onSubmit={handleLockSubmit}
+            onCancel={handleLockCancel}
+            error={lockError}
+          />
+        )}
+      </>
     );
   }
   if (tieIntro === "final") {
@@ -1049,33 +1164,42 @@ export default function QuizScreen({ quizState, setQuizState }) {
     );
     const derivedQs = deriveTieBreakerQuestions(tiedTeams.length);
     return (
-      <TieBreakerIntro
-        round="final-intro"
-        tiedTeams={tiedTeams}
-        onStart={() => {
-          saveSnapshot("start-legacy-final");
-          setQuizState((prev) => {
-            const next = {
-              ...prev,
-              round: "final",
-              currentQuestion: 0,
-              turn: 0,
-              tieIntro: null,
-              finalTiebreaker: derivedQs,
-              aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
-              tieBaseScores: Object.fromEntries(
-                (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
-                  (t) => [t, prev.scores?.[t] || 0]
-                )
-              ),
-            };
-            try {
-              localStorage.setItem("quizState", JSON.stringify(next));
-            } catch {}
-            return next;
-          });
-        }}
-      />
+      <>
+        <TieBreakerIntro
+          round="final-intro"
+          tiedTeams={tiedTeams}
+          onStart={() => {
+            saveSnapshot("start-legacy-final");
+            setQuizState((prev) => {
+              const next = {
+                ...prev,
+                round: "final",
+                currentQuestion: 0,
+                turn: 0,
+                tieIntro: null,
+                finalTiebreaker: derivedQs,
+                aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
+                tieBaseScores: Object.fromEntries(
+                  (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
+                    (t) => [t, prev.scores?.[t] || 0]
+                  )
+                ),
+              };
+              try {
+                localStorage.setItem("quizState", JSON.stringify(next));
+              } catch {}
+              return next;
+            });
+          }}
+        />
+        {quizState.started && quizState.round !== "finished" && showLock && !isUnlocked && (
+          <PasswordLockModal
+            onSubmit={handleLockSubmit}
+            onCancel={handleLockCancel}
+            error={lockError}
+          />
+        )}
+      </>
     );
   }
 
@@ -1089,43 +1213,84 @@ export default function QuizScreen({ quizState, setQuizState }) {
       30;
 
     return (
-      <TieBreakerIntro
-        round="rounds-tie"
-        tiedTeams={tiedTeams}
-        onStart={() => {
-          saveSnapshot("start-rounds-tiebreaker");
-          setQuizState((prev) => {
-            // check if tiebreaker round already exists
-            const existingIndex = (prev.rounds || []).findIndex(
-              (r) => r && r.id === "tiebreaker"
-            );
+      <>
+        <TieBreakerIntro
+          round="rounds-tie"
+          tiedTeams={tiedTeams}
+          onStart={() => {
+            saveSnapshot("start-rounds-tiebreaker");
+            setQuizState((prev) => {
+              // check if tiebreaker round already exists
+              const existingIndex = (prev.rounds || []).findIndex(
+                (r) => r && r.id === "tiebreaker"
+              );
 
-            if (existingIndex >= 0) {
-              // patch its questions to derived set
-              const newRounds = [...prev.rounds];
-              const existing = { ...(newRounds[existingIndex] || {}) };
-              existing.questions = derivedQs;
-              existing.title = existing.title || "Tie-Breaker Round";
-              newRounds[existingIndex] = existing;
+              if (existingIndex >= 0) {
+                // patch its questions to derived set
+                const newRounds = [...prev.rounds];
+                const existing = { ...(newRounds[existingIndex] || {}) };
+                existing.questions = derivedQs;
+                existing.title = existing.title || "Tie-Breaker Round";
+                newRounds[existingIndex] = existing;
 
-              const patchedPerRound = Array.isArray(
-                prev.timerSettings?.perRound
-              )
+                const patchedPerRound = Array.isArray(
+                  prev.timerSettings?.perRound
+                )
+                  ? [...prev.timerSettings.perRound]
+                  : [];
+                if (!patchedPerRound[existingIndex])
+                  patchedPerRound[existingIndex] = tieRoundTime;
+
+                const next = {
+                  ...prev,
+                  rounds: newRounds,
+                  currentRoundIndex: existingIndex,
+                  currentQuestion: 0,
+                  turn: 0,
+                  aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
+                  timerSettings: {
+                    ...(prev.timerSettings || {}),
+                    perRound: patchedPerRound,
+                  },
+                  tieIntro: null,
+                  round: "rounds",
+                  tieBaseScores: Object.fromEntries(
+                    (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
+                      (t) => [t, prev.scores?.[t] || 0]
+                    )
+                  ),
+                };
+                try {
+                  localStorage.setItem("quizState", JSON.stringify(next));
+                } catch {}
+                return next;
+              }
+
+              // append a new tie-breaker round with derived questions
+              const newRounds = [
+                ...(prev.rounds || []),
+                {
+                  ...(tieData || {}),
+                  id: "tiebreaker",
+                  title: (tieData && tieData.title) || "Tie-Breaker Round",
+                  questions: derivedQs,
+                },
+              ];
+              const newPerRound = Array.isArray(prev.timerSettings?.perRound)
                 ? [...prev.timerSettings.perRound]
                 : [];
-              if (!patchedPerRound[existingIndex])
-                patchedPerRound[existingIndex] = tieRoundTime;
+              newPerRound.push(tieRoundTime);
 
               const next = {
                 ...prev,
                 rounds: newRounds,
-                currentRoundIndex: existingIndex,
+                currentRoundIndex: newRounds.length - 1,
                 currentQuestion: 0,
                 turn: 0,
                 aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
                 timerSettings: {
                   ...(prev.timerSettings || {}),
-                  perRound: patchedPerRound,
+                  perRound: newPerRound,
                 },
                 tieIntro: null,
                 round: "rounds",
@@ -1139,49 +1304,17 @@ export default function QuizScreen({ quizState, setQuizState }) {
                 localStorage.setItem("quizState", JSON.stringify(next));
               } catch {}
               return next;
-            }
-
-            // append a new tie-b​​reaker round with derived questions
-            const newRounds = [
-              ...(prev.rounds || []),
-              {
-                ...(tieData || {}),
-                id: "tiebreaker",
-                title: (tieData && tieData.title) || "Tie-Breaker Round",
-                questions: derivedQs,
-              },
-            ];
-            const newPerRound = Array.isArray(prev.timerSettings?.perRound)
-              ? [...prev.timerSettings.perRound]
-              : [];
-            newPerRound.push(tieRoundTime);
-
-            const next = {
-              ...prev,
-              rounds: newRounds,
-              currentRoundIndex: newRounds.length - 1,
-              currentQuestion: 0,
-              turn: 0,
-              aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
-              timerSettings: {
-                ...(prev.timerSettings || {}),
-                perRound: newPerRound,
-              },
-              tieIntro: null,
-              round: "rounds",
-              tieBaseScores: Object.fromEntries(
-                (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
-                  (t) => [t, prev.scores?.[t] || 0]
-                )
-              ),
-            };
-            try {
-              localStorage.setItem("quizState", JSON.stringify(next));
-            } catch {}
-            return next;
-          });
-        }}
-      />
+            });
+          }}
+        />
+        {quizState.started && quizState.round !== "finished" && showLock && !isUnlocked && (
+          <PasswordLockModal
+            onSubmit={handleLockSubmit}
+            onCancel={handleLockCancel}
+            error={lockError}
+          />
+        )}
+      </>
     );
   }
 
@@ -1298,6 +1431,15 @@ export default function QuizScreen({ quizState, setQuizState }) {
           <RestartModal
             onConfirm={handleRestartConfirm}
             onCancel={handleRestartCancel}
+          />
+        )}
+
+        {/* Password lock overlay if needed (quiz may be ongoing across overlays) */}
+        {requireLockNow && showLock && !isUnlocked && (
+          <PasswordLockModal
+            onSubmit={handleLockSubmit}
+            onCancel={handleLockCancel}
+            error={lockError}
           />
         )}
       </div>
@@ -1587,6 +1729,15 @@ export default function QuizScreen({ quizState, setQuizState }) {
             onCancel={handleRestartCancel}
           />
         )}
+
+        {/* Password lock overlay if needed */}
+        {requireLockNow && showLock && !isUnlocked && (
+          <PasswordLockModal
+            onSubmit={handleLockSubmit}
+            onCancel={handleLockCancel}
+            error={lockError}
+          />
+        )}
       </div>
     );
   }
@@ -1681,6 +1832,24 @@ export default function QuizScreen({ quizState, setQuizState }) {
             Start Quiz
           </button>
         </div>
+
+        {/* Password lock overlay if needed (only appears when quiz is ongoing or when Start is pressed without unlock) */}
+        {requireLockNow && showLock && !isUnlocked && (
+          <PasswordLockModal
+            onSubmit={handleLockSubmit}
+            onCancel={handleLockCancel}
+            error={lockError}
+          />
+        )}
+        {/* If user clicked Start and we showed lock instead, also show lock here (started still false). */}
+        {!started && showLock && !isUnlocked && (
+          <PasswordLockModal
+            onSubmit={handleLockSubmit}
+            onCancel={handleLockCancel}
+            error={lockError}
+          />
+        )}
+
         {showConfirmRestart && (
           <RestartModal
             onConfirm={handleRestartConfirm}
@@ -2056,6 +2225,16 @@ export default function QuizScreen({ quizState, setQuizState }) {
       </div>
 
       {showConfetti && <ConfettiCelebration />}
+
+      {/* Password lock overlay if needed */}
+      {requireLockNow && showLock && !isUnlocked && (
+        <PasswordLockModal
+          onSubmit={handleLockSubmit}
+          onCancel={handleLockCancel}
+          error={lockError}
+        />
+      )}
+
       {showConfirmRestart && (
         <RestartModal
           onConfirm={handleRestartConfirm}
