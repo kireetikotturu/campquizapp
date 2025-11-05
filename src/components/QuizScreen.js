@@ -1,9 +1,23 @@
-// Note: This is your full QuizScreen with slides fix on Restart.
-// The rest of your features (leaderboard flex, tie-breaker intro/automation, timers, snapshot/revert, etc.) are preserved.
-// Update in this version:
-// - After the tie-breaker round completes, if it is still a tie, we immediately declare Shared Winners (no more re-running tiebreaker).
-// - We prevent the round-complete screen from appearing for the tie-breaker round (avoids "Continue" causing another tie flow).
-// - Finished screen now shows: "World Quality Day Quiz - 2025" and a clear Winner/Shared Winners block above your existing summary.
+// Note: Full QuizScreen with all previous features preserved and fixes applied.
+// Key features retained:
+// - Media shown BELOW question text, options below media.
+// - Bottom status line for "Time's up" and "Answer" (doesn't cover content).
+// - Pass-on scoring: original team correct = 10 (or question.points), pass-on team correct = 5.
+// - Robust multi-step Revert history: exact step-by-step undo including timer/pass/score/UI.
+// - Slim subtle scrollbar for the question container.
+// - Manual timer start for the first team; auto-start on pass.
+// - Round-complete screen after each selected round to show scores and continue the flow.
+// - After all selected rounds: if tie -> single tie-breaker round; if tie persists after it -> Shared Winners and finish.
+//
+// New in this version:
+// - Tie-breaker question count adapts to tied team count to avoid endless looping:
+//   • If 5 teams tied and tiebreaker JSON has 5 questions, use 5 (1 each).
+//   • If 3 teams tied, use 3 questions (1 each).
+//   • If 2 teams tied, use 4 questions (2 each).
+//   • Cap by available questions in tieData.
+// - Round-complete overlay will NOT appear for the tie-breaker round (prevents looping/re-running).
+// - Option click reveals the answer first and pauses the timer; "Next" is enabled only after reveal (unchanged).
+// - Auto-start Pass timer is guaranteed (interval re-inits on startedAt change).
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,35 +47,35 @@ function renderMedia(url, style = {}, isQuestion = false) {
   const baseImgStyle = isQuestion
     ? {
         width: "100%",
-        maxWidth: "320px",
-        maxHeight: "20vh",
+        maxWidth: "100%",
+        maxHeight: "55vh",
         borderRadius: 12,
         boxShadow: "0 2px 12px #ffe06666",
         objectFit: "contain",
-        margin: "1em auto",
+        margin: "0 auto",
         display: "block",
       }
     : {
         width: "100%",
-        maxWidth: "380px",
-        maxHeight: "26vh",
+        maxWidth: "100%",
+        maxHeight: "55vh",
         borderRadius: 12,
         boxShadow: "0 2px 12px #ffe06666",
         objectFit: "contain",
-        margin: "1em auto",
+        margin: "0 auto",
         display: "block",
       };
   if (type === "image") {
     return (
-      <div className="media-center">
+      <div className="media-center" style={{ width: "100%" }}>
         <img src={url} alt="quiz-media" style={{ ...baseImgStyle, ...style }} />
       </div>
     );
   }
   if (type === "audio") {
     return (
-      <div className="media-center">
-        <audio controls style={{ width: "90%" }}>
+      <div className="media-center" style={{ width: "100%" }}>
+        <audio controls style={{ width: "100%" }}>
           <source src={url} />
           Your browser does not support the audio element.
         </audio>
@@ -70,16 +84,17 @@ function renderMedia(url, style = {}, isQuestion = false) {
   }
   if (type === "video") {
     return (
-      <div className="media-center">
+      <div className="media-center" style={{ width: "100%" }}>
         <video
           controls
           style={{
-            maxWidth: isQuestion ? "320px" : "380px",
-            maxHeight: isQuestion ? "20vh" : "26vh",
+            width: "100%",
+            maxWidth: "100%",
+            maxHeight: "55vh",
             borderRadius: 12,
             boxShadow: "0 2px 12px #ffe06666",
             objectFit: "contain",
-            margin: "1em auto",
+            margin: "0 auto",
             display: "block",
             ...style,
           }}
@@ -187,6 +202,36 @@ function RestartModal({ onConfirm, onCancel }) {
 }
 
 export default function QuizScreen({ quizState, setQuizState }) {
+  // Inject scoped layout CSS
+  const injectedLayoutCSS = `
+    .qbox { position: relative; display: flex; flex-direction: column; gap: 10px; }
+    .q-main { flex: 1; min-height: 0; display: flex; }
+    .q-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; padding-right: 4px; }
+
+    /* Slim, subtle scrollbar only for question container */
+    .q-scroll { scrollbar-width: thin; scrollbar-color: rgba(34,34,34,0.18) transparent; }
+    .q-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .q-scroll::-webkit-scrollbar-track { background: transparent; }
+    .q-scroll::-webkit-scrollbar-thumb { background: rgba(34,34,34,0.22); border-radius: 8px; }
+    .q-scroll:hover::-webkit-scrollbar-thumb { background: rgba(34,34,34,0.32); }
+    .q-scroll::-webkit-scrollbar-corner { background: transparent; }
+
+    .q-row { width: 100%; }
+    .q-media { width: 100%; display: flex; align-items: center; justify-content: center; }
+    .opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 940px; margin: 6px auto 0; }
+    .q-status { margin-top: clamp(10px, 1.6vh, 16px); display: flex; align-items: center; justify-content: center; min-height: 1.6em; }
+    .q-line { font-size: 0.95rem; line-height: 1.3; font-weight: 800; text-align: center; }
+    .q-line.warn { color: #b91c1c; }
+    .q-line.answer { color: #0b6b2a; }
+    .question-main-text { word-wrap: break-word; overflow-wrap: anywhere; font-size: clamp(1.08rem, 1.6vw, 1.65rem) !important; }
+    @media (max-width: 1280px) {
+      .opts-grid { max-width: 860px; }
+    }
+    @media (max-width: 1024px) {
+      .opts-grid { grid-template-columns: 1fr; max-width: 740px; }
+    }
+  `;
+
   const {
     teams,
     scores,
@@ -224,8 +269,11 @@ export default function QuizScreen({ quizState, setQuizState }) {
   const [lastCompletedRoundIndex, setLastCompletedRoundIndex] = useState(null);
   const [showConfirmRestart, setShowConfirmRestart] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+
+  // Refs/timers
   const timerRef = useRef();
   const isFirstMount = useRef(true);
+  const suppressResetRef = useRef(false);
   const teamListRef = useRef();
 
   const perRoundTimers =
@@ -234,23 +282,161 @@ export default function QuizScreen({ quizState, setQuizState }) {
   const passOnTimer =
     (quizState.timerSettings && quizState.timerSettings.passOn) || 15;
 
-  // Helper: compute top score and tied teams from a given state
-  const computeTopAndTiedTeams = (state) => {
-    const scoringTeams =
-      state.aliveTeams && state.aliveTeams.length
-        ? state.aliveTeams
-        : state.teams || [];
-    if (!scoringTeams || scoringTeams.length === 0)
-      return { topScore: 0, tiedTeams: [] };
-    const scoresArr = scoringTeams.map((t) => state.scores?.[t] || 0);
-    const maxScore = Math.max(...scoresArr);
-    const tied = scoringTeams.filter(
-      (t) => (state.scores?.[t] || 0) === maxScore
-    );
-    return { topScore: maxScore, tiedTeams: tied };
+  // Helper: derive tie-breaker questions count based on tied team count
+  const deriveTieBreakerQuestions = (count) => {
+    const all = (tieData && Array.isArray(tieData.questions)) ? tieData.questions : [];
+    if (count <= 0) return [];
+    let desired = count === 2 ? 4 : count; // 2 teams -> 4 questions (2 each), else one per team
+    desired = Math.min(desired, all.length);
+    return all.slice(0, desired);
   };
 
-  // Load questions for the current round
+  // ---------------- History for Revert ----------------
+  const HISTORY_KEY = "quizHistory";
+  const HISTORY_LIMIT = 100;
+
+  const getEffectiveTimeLeft = (t, ctx) => {
+    if (!t) {
+      return ctx.roundsMode ? (ctx.perRoundTimers[ctx.currentRoundIndex] ?? 30) : 30;
+    }
+    if (t.running && t.startedAt) {
+      const elapsed = Math.floor((Date.now() - t.startedAt) / 1000);
+      const base = t.passMode
+        ? ctx.passOnTimer
+        : ctx.roundsMode
+        ? ctx.perRoundTimers[ctx.currentRoundIndex] ?? 30
+        : 30;
+      return Math.max(0, (t.timeLeft ?? base) - elapsed);
+    }
+    if (typeof t.timeLeft === "number") return t.timeLeft;
+    return ctx.roundsMode ? (ctx.perRoundTimers[ctx.currentRoundIndex] ?? 30) : 30;
+  };
+
+  const normalizeQuizStateForSnapshot = (state) => {
+    const ctx = {
+      roundsMode,
+      perRoundTimers,
+      currentRoundIndex,
+      passOnTimer,
+    };
+    const tl = getEffectiveTimeLeft(state.timer, ctx);
+    return {
+      ...state,
+      timer: {
+        ...state.timer,
+        running: false,
+        paused: true,
+        startedAt: null,
+        timeLeft: tl,
+      },
+    };
+  };
+
+  const currentUIState = () => ({
+    showAnswer,
+    answered,
+    selectedOption,
+    passedTeams,
+    originalTurn,
+    timeUp,
+    questionRevealed,
+    showRoundCompleteScreen,
+    lastCompletedRoundIndex,
+    showConfirmRestart,
+    showConfetti,
+  });
+
+  const applyUIState = (ui) => {
+    setShowAnswer(ui.showAnswer || false);
+    setAnswered(ui.answered || false);
+    setSelectedOption(
+      typeof ui.selectedOption === "number" ? ui.selectedOption : null
+    );
+    setPassedTeams(Array.isArray(ui.passedTeams) ? ui.passedTeams : []);
+    setOriginalTurn(typeof ui.originalTurn === "number" ? ui.originalTurn : 0);
+    setTimeUp(!!ui.timeUp);
+    setQuestionRevealed(!!ui.questionRevealed);
+    setShowRoundCompleteScreen(!!ui.showRoundCompleteScreen);
+    setLastCompletedRoundIndex(
+      typeof ui.lastCompletedRoundIndex === "number"
+        ? ui.lastCompletedRoundIndex
+        : null
+    );
+    setShowConfirmRestart(!!ui.showConfirmRestart);
+    setShowConfetti(!!ui.showConfetti);
+  };
+
+  const readHistory = () => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeHistory = (arr) => {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+    } catch {}
+  };
+
+  const saveSnapshot = (reason = "") => {
+    try {
+      clearInterval(timerRef.current);
+      const normalized = normalizeQuizStateForSnapshot(quizState);
+      localStorage.setItem("quizState", JSON.stringify(normalized));
+      const hist = readHistory();
+      const entry = {
+        quizState: normalized,
+        ui: currentUIState(),
+        ts: Date.now(),
+        reason,
+      };
+      const nextHist =
+        hist.length >= HISTORY_LIMIT
+          ? [...hist.slice(hist.length - HISTORY_LIMIT + 1), entry]
+          : [...hist, entry];
+      writeHistory(nextHist);
+    } catch {}
+  };
+
+  const revertSnapshot = () => {
+    clearInterval(timerRef.current);
+    const hist = readHistory();
+    if (!hist.length) {
+      alert("No previous state to revert to.");
+      return;
+    }
+    const prev = hist[hist.length - 1];
+    const newHist = hist.slice(0, hist.length - 1);
+    writeHistory(newHist);
+
+    if (!prev || !prev.quizState) {
+      alert("No previous state to revert to.");
+      return;
+    }
+    suppressResetRef.current = true;
+    const restoredQuizState = {
+      ...prev.quizState,
+      timer: {
+        ...(prev.quizState.timer || {}),
+        running: false,
+        paused: true,
+        startedAt: null,
+      },
+    };
+    try {
+      localStorage.setItem("quizState", JSON.stringify(restoredQuizState));
+    } catch {}
+    setQuizState(restoredQuizState);
+    applyUIState(prev.ui || {});
+  };
+  // --------------- End History ----------------
+
+  // Load questions for the current round or legacy round
   useEffect(() => {
     if (roundsMode) {
       setQuestions(currentRound?.questions ?? []);
@@ -275,262 +461,74 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
   const questionObj = questions?.[currentQuestion];
 
-  // Snapshots
-  const saveSnapshot = () => {
-    try {
-      localStorage.setItem("quizStateSnapshot", JSON.stringify(quizState));
-    } catch (e) {}
-  };
-  const revertSnapshot = () => {
-    try {
-      const s = localStorage.getItem("quizStateSnapshot");
-      if (!s) {
-        return alert("No previous state to revert to.");
-      }
-      const parsed = JSON.parse(s);
-      localStorage.setItem("quizState", JSON.stringify(parsed));
-      setQuizState(parsed);
-    } catch (e) {
-      console.error("Revert failed", e);
-    }
-  };
-
-  // Round-complete screen (prevent it for tie-breaker round to avoid re-triggering tie flow)
-  useEffect(() => {
-    if (!started) return;
-    const qLen = questions.length;
-    const isRoundComplete = qLen > 0 && currentQuestion >= qLen;
-    if (
-      isRoundComplete &&
-      !showRoundCompleteScreen &&
-      !tieIntro &&
-      quizState.round !== "finished"
-    ) {
-      // If current round is the tiebreaker, do not show round-complete UI
-      if (roundsMode && currentRound?.id === "tiebreaker") return;
-
-      if (roundsMode) setLastCompletedRoundIndex(currentRoundIndex);
-      else setLastCompletedRoundIndex(null);
-      setShowRoundCompleteScreen(true);
-    }
-  }, [
-    currentQuestion,
-    legacyRound,
-    started,
-    questions,
-    showRoundCompleteScreen,
-    tieIntro,
-    quizState.round,
-    roundsMode,
-    currentRoundIndex,
-    currentRound?.id,
-  ]);
-
-  // Continue after round-complete
-  const handleShowTieIntroAfterRoundComplete = () => {
-    saveSnapshot();
-    setShowRoundCompleteScreen(false);
-
-    // If we somehow show round-complete while in tiebreaker, finish immediately (shared winners allowed)
-    if (roundsMode && currentRound?.id === "tiebreaker") {
-      setQuizState((prev) => {
-        const scoringTeams =
-          prev.aliveTeams && prev.aliveTeams.length ? prev.aliveTeams : prev.teams || [];
-        const base = prev.tieBaseScores || {};
-        const gains = Object.fromEntries(
-          scoringTeams.map((t) => [t, (prev.scores?.[t] || 0) - (base[t] || 0)])
-        );
-        const maxGain = Math.max(...scoringTeams.map((t) => gains[t] || 0));
-        const winners = scoringTeams.filter((t) => (gains[t] || 0) === maxGain);
-        const next = { ...prev, round: "finished", winnerTeams: winners, tieIntro: null };
-        localStorage.setItem("quizState", JSON.stringify(next));
-        return next;
-      });
-      return;
-    }
-
-    if (roundsMode) {
-      setQuizState((prev) => {
-        const nextIndex = (prev.currentRoundIndex || 0) + 1;
-
-        if (nextIndex >= (prev.rounds?.length || 0)) {
-          const scoringTeams =
-            prev.aliveTeams && prev.aliveTeams.length
-              ? prev.aliveTeams
-              : prev.teams || [];
-          const aliveScores = scoringTeams.map(
-            (team) => prev.scores?.[team] || 0
-          );
-          const maxScore = aliveScores.length ? Math.max(...aliveScores) : 0;
-          const tiedTeams = scoringTeams.filter(
-            (team) => (prev.scores?.[team] || 0) === maxScore
-          );
-
-          const tieHasQuestions =
-            tieData &&
-            Array.isArray(tieData.questions) &&
-            tieData.questions.length > 0;
-
-          if (tiedTeams.length > 1 && tieHasQuestions) {
-            // Show tie-intro once; do not auto-switch (host starts it)
-            const next = {
-              ...prev,
-              tieIntro: "rounds-tie",
-              roundsTieTeams: tiedTeams,
-            };
-            localStorage.setItem("quizState", JSON.stringify(next));
-            return next;
-          }
-
-          // No tie (or tiebreaker already handled) -> finish
-          const winners = tiedTeams;
-          const finishedState = {
-            ...prev,
-            round: "finished",
-            currentRoundIndex: nextIndex,
-            winnerTeams: winners,
-            tieIntro: null,
-          };
-          localStorage.setItem("quizState", JSON.stringify(finishedState));
-          return finishedState;
-        }
-
-        const next = {
-          ...prev,
-          currentRoundIndex: nextIndex,
-          currentQuestion: 0,
-          turn: 0,
-          timer: {
-            running: false,
-            timeLeft:
-              (prev.timerSettings?.perRound &&
-                prev.timerSettings.perRound[nextIndex]) || 30,
-            paused: false,
-            passMode: false,
-            startedAt: null,
-          },
-          tieIntro: null,
-        };
-        localStorage.setItem("quizState", JSON.stringify(next));
-        return next;
-      });
-    } else {
-      // legacy flow
-      saveSnapshot();
-      setQuizState((prev) => {
-        const next = {
-          ...prev,
-          tieIntro:
-            legacyRound === "main"
-              ? "tie"
-              : legacyRound === "tiebreaker"
-              ? "final"
-              : null,
-        };
-        localStorage.setItem("quizState", JSON.stringify(next));
-        return next;
-      });
-    }
-  };
-
-  // Timer helpers
-  function pausedTime(timerObj) {
-    if (!timerObj) {
-      return roundsMode ? (perRoundTimers[currentRoundIndex] ?? 30) : 30;
-    }
-    if (timerObj.running && timerObj.startedAt) {
-      const elapsed = Math.floor((Date.now() - timerObj.startedAt) / 1000);
-      const base = timerObj.passMode
-        ? passOnTimer
-        : roundsMode
-        ? perRoundTimers[currentRoundIndex] ?? 30
-        : 30;
-      return Math.max(0, (timerObj.timeLeft ?? base) - elapsed);
-    }
-    if (typeof timerObj.timeLeft === "number") return timerObj.timeLeft;
-    return roundsMode ? (perRoundTimers[currentRoundIndex] ?? 30) : 30;
-  }
-
+  // Initialize on first mount: normalize timer and seed history
   useEffect(() => {
     if (isFirstMount.current) {
       isFirstMount.current = false;
-      setQuizState((prev) => {
-        const t = prev.timer || {};
-        let left = pausedTime(t);
-        const nextState = {
-          ...prev,
-          started: prev.started || false,
-          timer: {
-            running: false,
-            paused: true,
-            passMode: !!t.passMode,
-            timeLeft: left,
-            startedAt: null,
+      const normalized = normalizeQuizStateForSnapshot(quizState);
+      setQuizState(normalized);
+      try {
+        localStorage.setItem("quizState", JSON.stringify(normalized));
+      } catch {}
+      const existing = readHistory();
+      if (!existing.length) {
+        writeHistory([
+          {
+            quizState: normalized,
+            ui: currentUIState(),
+            ts: Date.now(),
+            reason: "initial",
           },
-        };
-        localStorage.setItem("quizState", JSON.stringify(nextState));
-        return nextState;
-      });
+        ]);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reset per-question UI
+  // Reset per-question UI (skip if restoring via revert)
   useEffect(() => {
+    if (suppressResetRef.current) {
+      suppressResetRef.current = false;
+      return;
+    }
+    // Initialize timer for new question: full base time, paused (manual start)
+    const baseTime = roundsMode
+      ? perRoundTimers[currentRoundIndex] ?? 30
+      : 30;
+
     setShowAnswer(false);
     setPassedTeams([]);
     setOriginalTurn(turn);
     setTimeUp(false);
     setQuestionRevealed(false);
     setSelectedOption(null);
+
     setQuizState((prev) => {
       const next = {
         ...prev,
         timer: {
-          ...prev.timer,
           running: false,
           paused: true,
+          passMode: false,
+          timeLeft: baseTime,
           startedAt: null,
         },
       };
-      localStorage.setItem("quizState", JSON.stringify(next));
+      try {
+        localStorage.setItem("quizState", JSON.stringify(next));
+      } catch {}
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestion, started, legacyRound, currentRoundIndex]);
 
-  // Start timer when question revealed
-  useEffect(() => {
-    if (!started || !questionRevealed) return;
-    setQuizState((prev) => {
-      const baseTime =
-        passedTeams.length !== 0
-          ? passOnTimer
-          : roundsMode
-          ? perRoundTimers[currentRoundIndex] ?? 30
-          : 30;
-      const next = {
-        ...prev,
-        timer: {
-          running: true,
-          paused: false,
-          passMode: passedTeams.length !== 0,
-          timeLeft: baseTime,
-          startedAt: Date.now(),
-        },
-      };
-      localStorage.setItem("quizState", JSON.stringify(next));
-      return next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionRevealed, started, passedTeams.length, currentRoundIndex]);
-
-  // Timer tick
+  // Timer tick (restart interval when startedAt changes)
   useEffect(() => {
     if (!started || !timer?.running || timer.paused || showAnswer) {
       clearInterval(timerRef.current);
       return;
     }
+    clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setQuizState((prevState) => {
         let tl = (prevState.timer.timeLeft ?? 0) - 1;
@@ -542,18 +540,61 @@ export default function QuizScreen({ quizState, setQuizState }) {
             running: tl > 0,
           },
         };
-        localStorage.setItem("quizState", JSON.stringify(nextState));
+        try {
+          localStorage.setItem("quizState", JSON.stringify(nextState));
+        } catch {}
         return nextState;
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [started, timer?.running, timer?.paused, showAnswer, setQuizState]);
+  }, [
+    started,
+    timer?.running,
+    timer?.paused,
+    timer?.startedAt, // ensure interval re-init when switching to pass mode
+    showAnswer,
+    setQuizState,
+  ]);
 
   useEffect(() => {
     setTimeUp(timer?.timeLeft === 0 && !showAnswer);
   }, [timer, showAnswer]);
 
-  // After tie-breaker finishes -> decide winners (delta from base). If tie persists => shared victory.
+  // Round-complete detector (robust) - SKIP for tiebreaker round to avoid loop UI
+  useEffect(() => {
+    if (!started) return;
+    const qLen = Array.isArray(questions) ? questions.length : 0;
+    const atEndIndex = qLen > 0 && currentQuestion >= qLen;
+    const lastQAnswered =
+      qLen > 0 && currentQuestion === qLen - 1 && showAnswer === true;
+
+    if (
+      (atEndIndex || lastQAnswered) &&
+      !showRoundCompleteScreen &&
+      quizState.round !== "finished" &&
+      !tieIntro
+    ) {
+      // Do not show Round Complete for tiebreaker in rounds mode
+      if (roundsMode && currentRound?.id === "tiebreaker") return;
+
+      if (roundsMode) setLastCompletedRoundIndex(currentRoundIndex);
+      else setLastCompletedRoundIndex(null);
+      setShowRoundCompleteScreen(true);
+    }
+  }, [
+    started,
+    questions,
+    currentQuestion,
+    showAnswer,
+    showRoundCompleteScreen,
+    quizState.round,
+    tieIntro,
+    roundsMode,
+    currentRoundIndex,
+    currentRound?.id,
+  ]);
+
+  // Tie-breaker finishing: decide winners based on gains vs base, then finish (shared winners allowed)
   useEffect(() => {
     if (!roundsMode) return;
     const current = quizState.rounds?.[quizState.currentRoundIndex];
@@ -583,7 +624,9 @@ export default function QuizScreen({ quizState, setQuizState }) {
         winnerTeams: winners,
         tieIntro: null,
       };
-      localStorage.setItem("quizState", JSON.stringify(next));
+      try {
+        localStorage.setItem("quizState", JSON.stringify(next));
+      } catch {}
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -611,8 +654,10 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
   const highestScore = leaderboard.length > 0 ? leaderboard[0].score : 0;
 
-  // Pause / Play
+  // Pause / Play via CircularTimer click (manual control)
   const handlePausePlay = () => {
+    saveSnapshot("pause-play");
+    clearInterval(timerRef.current);
     setQuizState((prevState) => {
       const nextState = prevState.timer.paused
         ? {
@@ -633,7 +678,9 @@ export default function QuizScreen({ quizState, setQuizState }) {
               startedAt: null,
             },
           };
-      localStorage.setItem("quizState", JSON.stringify(nextState));
+      try {
+        localStorage.setItem("quizState", JSON.stringify(nextState));
+      } catch {}
       return nextState;
     });
   };
@@ -642,11 +689,12 @@ export default function QuizScreen({ quizState, setQuizState }) {
   const handleRestartSafe = () => setShowConfirmRestart(true);
   const handleRestartCancel = () => setShowConfirmRestart(false);
 
-  // IMPORTANT: set slidesSeen false so Slides show first after Restart
   const handleRestartConfirm = () => {
-    saveSnapshot();
+    saveSnapshot("restart-confirm");
+    clearInterval(timerRef.current);
     setShowConfirmRestart(false);
     localStorage.removeItem("quizState");
+    writeHistory([]); // clear history on hard restart
     setQuizState({
       teams: [],
       aliveTeams: [],
@@ -664,7 +712,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
       },
       winnerTeams: [],
       tieIntro: null,
-      slidesSeen: false, // show Slides first after restart
+      slidesSeen: false,
       rounds: null,
       currentRoundIndex: 0,
       timerSettings: {
@@ -672,10 +720,42 @@ export default function QuizScreen({ quizState, setQuizState }) {
         passOn: 15,
       },
     });
+    const seed = {
+      quizState: normalizeQuizStateForSnapshot({
+        teams: [],
+        aliveTeams: [],
+        started: false,
+        currentQuestion: 0,
+        scores: {},
+        turn: 0,
+        round: "main",
+        timer: {
+          running: false,
+          timeLeft: 30,
+          paused: true,
+          passMode: false,
+          startedAt: null,
+        },
+        winnerTeams: [],
+        tieIntro: null,
+        slidesSeen: false,
+        rounds: null,
+        currentRoundIndex: 0,
+        timerSettings: {
+          perRound: [30, 30, 30, 30, 30],
+          passOn: 15,
+        },
+      }),
+      ui: currentUIState(),
+      ts: Date.now(),
+      reason: "post-restart-seed",
+    };
+    writeHistory([seed]);
   };
 
   const handleGoHome = () => {
-    saveSnapshot();
+    saveSnapshot("go-home");
+    clearInterval(timerRef.current);
     setQuizState((prev) => {
       const next = {
         ...prev,
@@ -699,27 +779,53 @@ export default function QuizScreen({ quizState, setQuizState }) {
         winnerTeams: [],
         tieIntro: null,
       };
-      localStorage.setItem("quizState", JSON.stringify(next));
+      try {
+        localStorage.setItem("quizState", JSON.stringify(next));
+      } catch {}
       return next;
     });
   };
 
   const handleStartQuiz = () => {
-    saveSnapshot();
+    saveSnapshot("start-quiz");
     setQuizState((prev) => {
       const nextState = { ...prev, started: true };
-      localStorage.setItem("quizState", JSON.stringify(nextState));
+      try {
+        localStorage.setItem("quizState", JSON.stringify(nextState));
+      } catch {}
       return nextState;
     });
   };
 
   const handleStartQuestion = () => {
-    saveSnapshot();
+    saveSnapshot("start-question");
+    // Reveal the question but DO NOT start the timer automatically.
+    // Initialize timer to full base time, paused.
+    const baseTime = roundsMode
+      ? perRoundTimers[currentRoundIndex] ?? 30
+      : 30;
     setQuestionRevealed(true);
+    setQuizState((prev) => {
+      const next = {
+        ...prev,
+        timer: {
+          running: false,
+          paused: true,
+          passMode: false,
+          timeLeft: baseTime,
+          startedAt: null,
+        },
+      };
+      try {
+        localStorage.setItem("quizState", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handlePass = () => {
-    saveSnapshot();
+    saveSnapshot("pass");
+    clearInterval(timerRef.current);
     const totalTeams = teamsToUse.length;
     let nextTurn = turn;
     let attempts = 0;
@@ -745,12 +851,15 @@ export default function QuizScreen({ quizState, setQuizState }) {
             startedAt: null,
           },
         };
-        localStorage.setItem("quizState", JSON.stringify(nextState));
+        try {
+          localStorage.setItem("quizState", JSON.stringify(nextState));
+        } catch {}
         return nextState;
       });
     } else {
       setPassedTeams(newPassedTeams);
       setQuestionRevealed(true);
+      // Auto-start pass timer (explicit)
       setQuizState((prev) => {
         const nextState = {
           ...prev,
@@ -760,19 +869,27 @@ export default function QuizScreen({ quizState, setQuizState }) {
             paused: false,
             passMode: true,
             timeLeft: passOnTimer,
-            startedAt: Date.now(),
+            startedAt: Date.now(), // ensures timer effect restarts
           },
         };
-        localStorage.setItem("quizState", JSON.stringify(nextState));
+        try {
+          localStorage.setItem("quizState", JSON.stringify(nextState));
+        } catch {}
         return nextState;
       });
     }
   };
 
   const handleCorrect = () => {
-    saveSnapshot();
+    // Score: base/original team gets question.points (default 10); pass-on team gets 5
+    saveSnapshot("correct");
+    clearInterval(timerRef.current);
     const teamName = teamsToUse[turn];
-    const pts = questionObj?.points ?? 10;
+    const basePts =
+      typeof questionObj?.points === "number" ? questionObj.points : 10;
+    const isPassOn = passedTeams.length > 0;
+    const pts = isPassOn ? 5 : basePts;
+
     setQuizState((prev) => {
       const newScores = {
         ...prev.scores,
@@ -788,17 +905,20 @@ export default function QuizScreen({ quizState, setQuizState }) {
           running: false,
           paused: true,
           passMode: false,
-          timeLeft: roundsMode ? perRoundTimers[currentRoundIndex] ?? 30 : 30,
+          timeLeft: roundsMode ? (perRoundTimers[currentRoundIndex] ?? 30) : 30,
           startedAt: null,
         },
       };
-      localStorage.setItem("quizState", JSON.stringify(nextState));
+      try {
+        localStorage.setItem("quizState", JSON.stringify(nextState));
+      } catch {}
       return nextState;
     });
   };
 
   const handleReveal = () => {
-    saveSnapshot();
+    saveSnapshot("reveal");
+    clearInterval(timerRef.current);
     setShowAnswer(true);
     setAnswered(true);
     setQuizState((prev) => {
@@ -811,13 +931,16 @@ export default function QuizScreen({ quizState, setQuizState }) {
           startedAt: null,
         },
       };
-      localStorage.setItem("quizState", JSON.stringify(nextState));
+      try {
+        localStorage.setItem("quizState", JSON.stringify(nextState));
+      } catch {}
       return nextState;
     });
   };
 
   const handleNext = () => {
-    saveSnapshot();
+    saveSnapshot("next-question");
+    clearInterval(timerRef.current);
     setQuizState((prev) => ({
       ...prev,
       currentQuestion: (prev.currentQuestion || 0) + 1,
@@ -826,12 +949,31 @@ export default function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleOptionSelect = (idx) => {
+    // Show the answer first; do NOT auto-advance; ALSO pause the timer immediately.
     if (!questionRevealed) {
-      saveSnapshot();
+      saveSnapshot("select-option-first-reveal");
       setQuestionRevealed(true);
+    } else {
+      saveSnapshot("select-option");
     }
     setSelectedOption(idx);
     setShowAnswer(true);
+    // Pause timer when revealing via option click
+    setQuizState((prev) => {
+      const nextState = {
+        ...prev,
+        timer: {
+          ...prev.timer,
+          running: false,
+          paused: true,
+          startedAt: null,
+        },
+      };
+      try {
+        localStorage.setItem("quizState", JSON.stringify(nextState));
+      } catch {}
+      return nextState;
+    });
   };
 
   const getCorrectAnswerText = () => {
@@ -863,12 +1005,13 @@ export default function QuizScreen({ quizState, setQuizState }) {
     const tiedTeams = scoringTeams.filter(
       (team) => (scores[team] || 0) === maxScore
     );
+    const derivedQs = deriveTieBreakerQuestions(tiedTeams.length);
     return (
       <TieBreakerIntro
         round="tie-intro"
         tiedTeams={tiedTeams}
         onStart={() => {
-          saveSnapshot();
+          saveSnapshot("start-legacy-tiebreaker");
           setQuizState((prev) => {
             const next = {
               ...prev,
@@ -876,8 +1019,18 @@ export default function QuizScreen({ quizState, setQuizState }) {
               currentQuestion: 0,
               turn: 0,
               tieIntro: null,
+              // store derived tie questions into legacy slot
+              tiebreaker: derivedQs,
+              aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
+              tieBaseScores: Object.fromEntries(
+                (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
+                  (t) => [t, prev.scores?.[t] || 0]
+                )
+              ),
             };
-            localStorage.setItem("quizState", JSON.stringify(next));
+            try {
+              localStorage.setItem("quizState", JSON.stringify(next));
+            } catch {}
             return next;
           });
         }}
@@ -894,12 +1047,13 @@ export default function QuizScreen({ quizState, setQuizState }) {
     const tiedTeams = scoringTeams.filter(
       (team) => (scores[team] || 0) === maxScore
     );
+    const derivedQs = deriveTieBreakerQuestions(tiedTeams.length);
     return (
       <TieBreakerIntro
         round="final-intro"
         tiedTeams={tiedTeams}
         onStart={() => {
-          saveSnapshot();
+          saveSnapshot("start-legacy-final");
           setQuizState((prev) => {
             const next = {
               ...prev,
@@ -907,8 +1061,17 @@ export default function QuizScreen({ quizState, setQuizState }) {
               currentQuestion: 0,
               turn: 0,
               tieIntro: null,
+              finalTiebreaker: derivedQs,
+              aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
+              tieBaseScores: Object.fromEntries(
+                (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
+                  (t) => [t, prev.scores?.[t] || 0]
+                )
+              ),
             };
-            localStorage.setItem("quizState", JSON.stringify(next));
+            try {
+              localStorage.setItem("quizState", JSON.stringify(next));
+            } catch {}
             return next;
           });
         }}
@@ -919,22 +1082,32 @@ export default function QuizScreen({ quizState, setQuizState }) {
   // Rounds-mode tie intro (after last selected round if tied)
   if (tieIntro === "rounds-tie") {
     const tiedTeams = quizState.roundsTieTeams || [];
+    const derivedQs = deriveTieBreakerQuestions(tiedTeams.length);
+    const tieRoundTime =
+      tieData.timeLimitSeconds ??
+      tieData.questions?.[0]?.timeLimitSeconds ??
+      30;
+
     return (
       <TieBreakerIntro
         round="rounds-tie"
         tiedTeams={tiedTeams}
         onStart={() => {
-          saveSnapshot();
+          saveSnapshot("start-rounds-tiebreaker");
           setQuizState((prev) => {
+            // check if tiebreaker round already exists
             const existingIndex = (prev.rounds || []).findIndex(
               (r) => r && r.id === "tiebreaker"
             );
-            const tieRoundTime =
-              tieData.timeLimitSeconds ??
-              tieData.questions?.[0]?.timeLimitSeconds ??
-              30;
 
             if (existingIndex >= 0) {
+              // patch its questions to derived set
+              const newRounds = [...prev.rounds];
+              const existing = { ...(newRounds[existingIndex] || {}) };
+              existing.questions = derivedQs;
+              existing.title = existing.title || "Tie-Breaker Round";
+              newRounds[existingIndex] = existing;
+
               const patchedPerRound = Array.isArray(
                 prev.timerSettings?.perRound
               )
@@ -942,8 +1115,10 @@ export default function QuizScreen({ quizState, setQuizState }) {
                 : [];
               if (!patchedPerRound[existingIndex])
                 patchedPerRound[existingIndex] = tieRoundTime;
+
               const next = {
                 ...prev,
+                rounds: newRounds,
                 currentRoundIndex: existingIndex,
                 currentQuestion: 0,
                 turn: 0,
@@ -960,16 +1135,20 @@ export default function QuizScreen({ quizState, setQuizState }) {
                   )
                 ),
               };
-              localStorage.setItem("quizState", JSON.stringify(next));
+              try {
+                localStorage.setItem("quizState", JSON.stringify(next));
+              } catch {}
               return next;
             }
 
+            // append a new tie-b​​reaker round with derived questions
             const newRounds = [
               ...(prev.rounds || []),
               {
-                ...tieData,
+                ...(tieData || {}),
                 id: "tiebreaker",
-                title: tieData.title || "Tie-Breaker Round",
+                title: (tieData && tieData.title) || "Tie-Breaker Round",
+                questions: derivedQs,
               },
             ];
             const newPerRound = Array.isArray(prev.timerSettings?.perRound)
@@ -996,7 +1175,9 @@ export default function QuizScreen({ quizState, setQuizState }) {
                 )
               ),
             };
-            localStorage.setItem("quizState", JSON.stringify(next));
+            try {
+              localStorage.setItem("quizState", JSON.stringify(next));
+            } catch {}
             return next;
           });
         }}
@@ -1004,7 +1185,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     );
   }
 
-  // Round complete screen
+  // Round complete screen (shows after each round reliably)
   if (showRoundCompleteScreen) {
     const idx = lastCompletedRoundIndex ?? currentRoundIndex;
     const roundLabel = roundsMode
@@ -1014,8 +1195,10 @@ export default function QuizScreen({ quizState, setQuizState }) {
       : legacyRound === "main"
       ? "Main Round"
       : legacyRound;
+
     return (
       <div className="container">
+        <style>{injectedLayoutCSS}</style>
         <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
           <button
             className="revert-btn"
@@ -1091,7 +1274,9 @@ export default function QuizScreen({ quizState, setQuizState }) {
                       borderBottom: "1px solid #f1f5f9",
                     }}
                   >
-                    <span style={{ fontWeight: 700, marginRight: 10 }}>{t.name} Score: </span>
+                    <span style={{ fontWeight: 700, marginRight: 10 }}>
+                      {t.name} Score:
+                    </span>
                     <span style={{ fontWeight: 800 }}>{t.score}</span>
                   </li>
                 ))}
@@ -1119,6 +1304,103 @@ export default function QuizScreen({ quizState, setQuizState }) {
     );
   }
 
+  // Continue after round-complete: advance or tie-breaker or finish
+  function handleShowTieIntroAfterRoundComplete() {
+    saveSnapshot("after-round-complete");
+    setShowRoundCompleteScreen(false);
+
+    if (roundsMode) {
+      setQuizState((prev) => {
+        const nextIndex = (prev.currentRoundIndex || 0) + 1;
+
+        // All selected rounds finished
+        if (nextIndex >= (prev.rounds?.length || 0)) {
+          const scoringTeams =
+            prev.aliveTeams && prev.aliveTeams.length
+              ? prev.aliveTeams
+              : prev.teams || [];
+          const aliveScores = scoringTeams.map(
+            (team) => prev.scores?.[team] || 0
+          );
+          const maxScore = aliveScores.length ? Math.max(...aliveScores) : 0;
+          const tiedTeams = scoringTeams.filter(
+            (team) => (prev.scores?.[team] || 0) === maxScore
+          );
+
+          const tieHasQuestions =
+            tieData &&
+            Array.isArray(tieData.questions) &&
+            tieData.questions.length > 0;
+
+          if (tiedTeams.length > 1 && tieHasQuestions) {
+            const next = {
+              ...prev,
+              tieIntro: "rounds-tie",
+              roundsTieTeams: tiedTeams,
+            };
+            try {
+              localStorage.setItem("quizState", JSON.stringify(next));
+            } catch {}
+            return next;
+          }
+
+          // No tie -> finish and announce winners
+          const winners = tiedTeams;
+          const finishedState = {
+            ...prev,
+            round: "finished",
+            currentRoundIndex: nextIndex,
+            winnerTeams: winners,
+            tieIntro: null,
+          };
+          try {
+            localStorage.setItem("quizState", JSON.stringify(finishedState));
+          } catch {}
+          return finishedState;
+        }
+
+        // Move to next round
+        const next = {
+          ...prev,
+          currentRoundIndex: nextIndex,
+          currentQuestion: 0,
+          turn: 0,
+          timer: {
+            running: false,
+            timeLeft:
+              (prev.timerSettings?.perRound &&
+                prev.timerSettings.perRound[nextIndex]) || 30,
+            paused: true, // keep paused until host starts
+            passMode: false,
+            startedAt: null,
+          },
+          tieIntro: null,
+        };
+        try {
+          localStorage.setItem("quizState", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    } else {
+      // Legacy: show tie flow between non-rounds states
+      setQuizState((prev) => {
+        const next = {
+          ...prev,
+          tieIntro:
+            legacyRound === "main"
+              ? "tie"
+              : legacyRound === "tiebreaker"
+              ? "final"
+              : null,
+        };
+        try {
+          localStorage.setItem("quizState", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+  }
+
   // Finished screen
   if (quizState.round === "finished") {
     const baseTeams =
@@ -1134,7 +1416,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
     const winnersToShow =
       winnerTeams && winnerTeams.length > 0 ? winnerTeams : fallbackWinners;
 
-    // Title and explicit "Winner"/"Shared Winners" block
     const quizTitle = "World Quality Day Quiz - 2025";
     const isShared = winnersToShow?.length > 1;
     const resultHeading = isShared ? "Shared Winners" : "Winner";
@@ -1144,6 +1425,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
     return (
       <div className="container">
+        <style>{injectedLayoutCSS}</style>
         <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
           <button
             className="revert-btn"
@@ -1205,7 +1487,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
             textAlign: "center",
           }}
         >
-          {/* Title and winner section */}
           <h2
             className="right-title"
             style={{
@@ -1251,7 +1532,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
             </div>
           </div>
 
-          {/* Your original summary block (kept) */}
           <h3 className="right-title" style={{ marginTop: "1.4rem" }}>
             Quiz Finished
           </h3>
@@ -1315,6 +1595,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
   if (!started) {
     return (
       <div className="container" style={{ position: "relative" }}>
+        <style>{injectedLayoutCSS}</style>
         <div
           style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}
         >
@@ -1331,7 +1612,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
           <button className="small-restart-btn" onClick={handleRestartSafe}>
             ⟲
           </button>
-        <div className="leaderboard-timer-row">
+          <div className="leaderboard-timer-row">
             <div className="leaderboard-timer-center">
               <CircularTimer
                 value={0}
@@ -1418,12 +1699,24 @@ export default function QuizScreen({ quizState, setQuizState }) {
     if (legacyRound === "tiebreaker") roundTitle = "Tie-Breaker Round";
     if (legacyRound === "final") roundTitle = "Final Tie-Breaker Round";
   }
+  const currentRoundNumberLabel = roundsMode
+    ? `Round ${currentRoundIndex + 1}`
+    : legacyRound.toUpperCase();
 
+  // Prepare media (displayed below question text)
+  const mediaStyle = {
+    maxWidth: "100%",
+    width: "100%",
+    maxHeight: "55vh",
+    borderRadius: 12,
+    objectFit: "contain",
+  };
   const questionMedia =
     isMediaUrl(questionObj?.question) &&
-    renderMedia(questionObj?.question, {}, true);
+    renderMedia(questionObj?.question, mediaStyle, true);
   const explicitMedia =
-    questionObj?.media && renderMedia(questionObj?.media, {}, true);
+    questionObj?.media && renderMedia(questionObj?.media, mediaStyle, true);
+  const mediaBlock = explicitMedia || questionMedia;
 
   const totalQuestions = questions.length;
   const currentQNum = currentQuestion + 1;
@@ -1434,7 +1727,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     const base = {
       padding: "0.8rem 1rem",
       borderRadius: 10,
-      margin: "6px 0",
+      margin: "0",
       width: "100%",
       textAlign: "left",
       cursor: showAnswer ? "default" : "pointer",
@@ -1475,12 +1768,10 @@ export default function QuizScreen({ quizState, setQuizState }) {
     return base;
   };
 
-  const currentRoundNumberLabel = roundsMode
-    ? `Round ${currentRoundIndex + 1}`
-    : legacyRound.toUpperCase();
-
   return (
     <div className="container" style={{ position: "relative" }}>
+      <style>{injectedLayoutCSS}</style>
+
       <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
         <button
           className="revert-btn"
@@ -1559,7 +1850,9 @@ export default function QuizScreen({ quizState, setQuizState }) {
                   </span>
                   <span>
                     {teamObj.score}
-                    {i === 0 && teamObj.score === highestScore && highestScore > 0 ? (
+                    {i === 0 &&
+                    teamObj.score === highestScore &&
+                    highestScore > 0 ? (
                       <span className="trophy" title="Top Team">
                         🏆
                       </span>
@@ -1624,72 +1917,99 @@ export default function QuizScreen({ quizState, setQuizState }) {
             </button>
           </div>
         ) : (
-          <div className={`question-box responsive-media-box`}>
-            <span className="question-progress">
-              {currentQNum}/{totalQuestions}
-            </span>
-            <div
-              className="question-main-text"
-              style={{ fontSize: "1.6rem", fontWeight: 800, marginBottom: 8 }}
-            >
-              {questionObj?.question}
+          <div className={`question-box responsive-media-box qbox`}>
+            {/* MAIN CONTENT AREA (scrolls inside if long) */}
+            <div className="q-main">
+              <div className="q-scroll">
+                {/* Top: progress + question */}
+                <div className="q-row">
+                  <span className="question-progress">
+                    {currentQNum}/{totalQuestions}
+                  </span>
+                  <div
+                    className="question-main-text"
+                    style={{ fontWeight: 800, marginTop: 4 }}
+                  >
+                    {questionObj?.question}
+                  </div>
+                </div>
+
+                {/* Media below question (bigger, centered) */}
+                {mediaBlock && (
+                  <div className="q-media">
+                    <div style={{ width: "100%", maxWidth: 1000 }}>
+                      {mediaBlock}
+                    </div>
+                  </div>
+                )}
+
+                {/* Options below media */}
+                {isMultipleChoice && (
+                  <div className="q-row">
+                    <div className="opts-grid">
+                      {questionObj.options.map((opt, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            if (!showAnswer) handleOptionSelect(i);
+                          }}
+                          disabled={showAnswer}
+                          aria-pressed={selectedOption === i}
+                          style={optionButtonStyle(i)}
+                        >
+                          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                            <div
+                              style={{
+                                minWidth: 34,
+                                minHeight: 34,
+                                borderRadius: 8,
+                                background: selectedOption === i ? "#f0f4ff" : "#ffffff",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                border: "1px solid #eee",
+                                fontWeight: 800,
+                                color: "#333",
+                              }}
+                            >
+                              {String.fromCharCode(65 + i)}
+                            </div>
+                            <div style={{ flex: 1, textAlign: "left", fontWeight: 700 }}>
+                              {opt}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {isMultipleChoice && (
-              <div
-                style={{
-                  width: "100%",
-                  maxWidth: 640,
-                  margin: "0.6rem auto 0",
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                {questionObj.options.map((opt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      if (!showAnswer && questionRevealed) handleOptionSelect(i);
-                    }}
-                    disabled={!questionRevealed || showAnswer}
-                    aria-pressed={selectedOption === i}
-                    style={optionButtonStyle(i)}
-                  >
-                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <div
-                        style={{
-                          minWidth: 34,
-                          minHeight: 34,
-                          borderRadius: 8,
-                          background: selectedOption === i ? "#f0f4ff" : "#ffffff",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          border: "1px solid #eee",
-                          fontWeight: 800,
-                          color: "#333",
-                        }}
-                      >
-                        {String.fromCharCode(65 + i)}
-                      </div>
-                      <div style={{ flex: 1, textAlign: "left", fontWeight: 700 }}>
-                        {opt}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {questionMedia}
-            {explicitMedia}
-
-            {timeUp && !showAnswer && (
-              <div className="timeup-msg">
-                Time's up! Please pass or reveal answer.
-              </div>
-            )}
+            {/* BOTTOM STATUS LINE (small, always spaced from content) */}
+            <div className="q-status" aria-live="polite">
+              {timeUp && !showAnswer ? (
+                <div className="q-line warn">
+                  Time&apos;s up! Please pass or reveal answer.
+                </div>
+              ) : showAnswer ? (
+                <div className="q-line answer">
+                  <b>Answer:</b>{" "}
+                  <span>
+                    {isMultipleChoice
+                      ? (Array.isArray(questionObj?.options) &&
+                        typeof questionObj?.answerIndex === "number"
+                          ? questionObj.options[questionObj.answerIndex]
+                          : "")
+                      : questionObj?.answer || ""}
+                  </span>
+                </div>
+              ) : (
+                <div className="q-line" style={{ opacity: 0.0 }}>
+                  &nbsp;
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1704,26 +2024,14 @@ export default function QuizScreen({ quizState, setQuizState }) {
           <button
             className="control-btn green"
             onClick={() => {
-              if (isMultipleChoice && selectedOption !== null) {
-                const correctIndex = questionObj?.answerIndex;
-                if (typeof correctIndex === "number") {
-                  if (selectedOption === correctIndex) {
-                    handleCorrect();
-                    return;
-                  }
-                }
-              }
+              // Host confirms correctness; awards based on pass/base rule
               handleCorrect();
             }}
-            disabled={showAnswer === false && !questionRevealed}
+            disabled={!questionRevealed}
           >
             Correct
           </button>
-          <button
-            className="control-btn red"
-            onClick={handleReveal}
-            disabled={showAnswer || !questionRevealed}
-          >
+          <button className="control-btn red" onClick={handleReveal} disabled={showAnswer || !questionRevealed}>
             Reveal
           </button>
           <button className="control-btn" onClick={handleNext} disabled={!showAnswer}>
@@ -1731,11 +2039,17 @@ export default function QuizScreen({ quizState, setQuizState }) {
           </button>
         </div>
 
+        {/* Hidden legacy answer box (answer shown in status line) */}
         {showAnswer && (
-          <div className="answer-box" style={{ width: "100%", textAlign: "center", marginTop: 12 }}>
+          <div className="answer-box" style={{ display: "none" }}>
             <b>Answer:</b>{" "}
             <span>
-              {isMultipleChoice ? getCorrectAnswerText() : questionObj?.answer}
+              {isMultipleChoice
+                ? (Array.isArray(questionObj?.options) &&
+                  typeof questionObj?.answerIndex === "number"
+                    ? questionObj.options[questionObj.answerIndex]
+                    : "")
+                : questionObj?.answer}
             </span>
           </div>
         )}

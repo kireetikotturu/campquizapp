@@ -3,13 +3,13 @@ import styled from "styled-components";
 import { motion, AnimatePresence } from "framer-motion";
 
 /*
-  SlidesScreen (updated)
+  SlidesScreen (full-bleed, PPT-like)
   - Full viewport slides (100vw x 100vh)
-  - Single top-left Back button (no bottom Back)
-  - Bottom-center Next button (transparent / subtle)
-  - Title slides centered; Rules & Rounds content centered vertically but text is left-aligned for readable line-by-line layout
+  - Single top-left Back button (transparent as requested)
+  - Bottom-center Next button (transparent/subtle)
+  - Title slides centered; Rules & Rounds content centered vertically but text lines are left-aligned for readability
   - Keyboard navigation supported
-  - Final Next persists slidesSeen: true and navigates to Setup (App reads slidesSeen)
+  - On final slide Next => sets slidesSeen: true and started: false in quizState (persisted)
 */
 
 const Fullscreen = styled.div`
@@ -43,7 +43,7 @@ const FullBg = styled(motion.div)`
   z-index: 0;
 `;
 
-/* centered overlay container */
+/* overlay container for centered content */
 const Content = styled(motion.div)`
   position: relative;
   z-index: 4;
@@ -103,7 +103,7 @@ const RuleItem = styled.li`
   margin: 0.6rem 0;
 `;
 
-/* Rounds: similar style (left-aligned items inside a centered block) */
+/* Rounds: same approach (left-aligned inside centered block) */
 const RoundsWrapper = styled.div`
   width: min(960px, 86vw);
   margin-top: clamp(18px, 2.6vw, 28px);
@@ -115,7 +115,7 @@ const RoundsList = styled(motion.ul)`
   margin: 0;
   padding: 0;
   width: 100%;
-  text-align: left; /* left-aligned lines */
+  text-align: left;
   color: #0b2540;
   font-size: clamp(16px, 1.9vw, 20px);
   line-height: 1.85;
@@ -127,22 +127,26 @@ const RoundItem = styled.li`
   padding: 0.45rem 0;
 `;
 
-/* Top-left single Back button */
+/* Top-left single Back button (transparent look). Color adapts when on image slide to remain visible. */
 const TopLeftBack = styled.button`
   position: fixed;
   top: 18px;
   left: 18px;
-  z-index: 50;
-  background: rgba(255,255,255,0.92);
-  border: 1px solid rgba(2,6,23,0.06);
+  z-index: 60;
+  background: transparent;
+  border: ${(p) =>
+    p.onImage ? "1px solid rgba(255,255,255,0.18)" : "1px solid rgba(2,6,23,0.06)"};
+  color: ${(p) => (p.onImage ? "rgba(255,255,255,0.95)" : "#071033")};
   padding: 10px 12px;
   border-radius: 8px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+  box-shadow: ${(p) =>
+    p.onImage ? "0 8px 22px rgba(2,6,23,0.18)" : "0 6px 18px rgba(2,6,23,0.06)"};
+  backdrop-filter: ${(p) => (p.onImage ? "blur(6px) saturate(120%)" : "none")};
 `;
 
-/* Bottom-center Next button (transparent / subtle visual) */
+/* Bottom-center Next button (transparent / subtle) */
 const Controls = styled.div`
   position: fixed;
   bottom: clamp(18px, 3vh, 36px);
@@ -150,7 +154,7 @@ const Controls = styled.div`
   right: 0;
   display: flex;
   justify-content: center;
-  z-index: 50;
+  z-index: 60;
   pointer-events: none;
 `;
 
@@ -159,7 +163,7 @@ const NextBtn = styled.button`
   min-width: 160px;
   padding: 12px 22px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.12);
   background: transparent; /* transparent style as requested */
   color: ${(p) => (p.onImage ? "white" : "#071033")};
   font-weight: 800;
@@ -224,10 +228,10 @@ export default function SlidesScreen({ quizState, setQuizState }) {
         title: "Rounds",
         rounds: [
           "1. Science and Technology (Multiple Choice - No Pass-on)",
-          "2. Current Affairs (Pass-On-Round)",
-          "3. General Knowledge (Pass-On-Round)",
-          "4. Movies & Entertainment (Pass-On-Round)",
-          "5. Sports and Awards (Pass-On-Round)",
+          "2. Current Affairs (Pass-on round)",
+          "3. General Knowledge (Logos, Captions, images, etc.)",
+          "4. Movies & Entertainment",
+          "5. Sports and Awards",
         ],
       },
     ],
@@ -308,7 +312,7 @@ export default function SlidesScreen({ quizState, setQuizState }) {
           )}
         </AnimatePresence>
 
-        <TopLeftBack onClick={handleBack} disabled={index === 0} aria-label="Back">
+        <TopLeftBack onClick={handleBack} disabled={index === 0} onImage={onImage} aria-label="Back">
           ← Back
         </TopLeftBack>
 
@@ -327,9 +331,7 @@ export default function SlidesScreen({ quizState, setQuizState }) {
                 <RulesWrapper>
                   <RulesList initial="initial" animate="animate" exit="exit">
                     {cur.rules.map((r, i) => (
-                      <RuleItem key={i}>
-                        {r}
-                      </RuleItem>
+                      <RuleItem key={i}>{r}</RuleItem>
                     ))}
                   </RulesList>
                 </RulesWrapper>
@@ -351,7 +353,7 @@ export default function SlidesScreen({ quizState, setQuizState }) {
 
             {cur.type === "image" && (
               <motion.div key={cur.id} initial="initial" animate="animate" exit="exit" variants={fadeUp} aria-hidden>
-                {/* intentionally no overlay text to keep image full-bleed; caption could be added here if needed */}
+                {/* intentionally no overlay text to keep image full-bleed */}
               </motion.div>
             )}
           </AnimatePresence>
