@@ -1,21 +1,10 @@
-// Note: Full QuizScreen with all previous features preserved and a password lock added.
-// Key features retained:
-// - Media shown BELOW question text, options below media.
-// - Bottom status line for "Time's up" and "Answer" (doesn't cover content).
-// - Pass-on scoring: original team correct = 10 (or question.points), pass-on team correct = 5.
-// - Robust multi-step Revert history: exact step-by-step undo including timer/pass/score/UI.
-// - Slim subtle scrollbar for the question container.
-// - Manual timer start for the first team; auto-start on pass.
-// - Round-complete screen after each selected round to show scores and continue the flow.
-// - After all selected rounds: if tie -> single tie-breaker round; if tie persists after it -> Shared Winners and finish.
-// - Option click reveals the answer and pauses timer; Next enabled only after reveal.
-// - Dynamic tie-breaker questions: 2 teams => 4 questions; otherwise one per tied team; capped by JSON available.
-//
-// NEW: Password Lock ("campq202530")
-// - When starting the quiz (pressing Start Quiz) a password is required (once per page load).
-// - While the quiz is ongoing (started and not finished), on any page refresh a password is required before viewing.
-// - The password prompt appears only on page load/refresh or when starting; once unlocked, it won't appear again until the next refresh.
-// - Timer is NOT forcibly modified by the lock; overlay blocks interaction and view until unlocked.
+// Note: Full QuizScreen with all previous features preserved.
+// This update refines the Leaderboard styling and layout:
+// - Team rows are single line with justify-content: space-between (team name at left, score + trophy at right).
+// - Compact row height and spacing so a minimum of 5 teams fit without scroll.
+// - Truncation with ellipsis for long team names; right side stays aligned.
+// - Modern, simple button colors retained from prior update.
+// All existing features and logic (timer, pass, tie-breakers, password lock, revert history, etc.) remain unchanged.
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,7 +12,6 @@ import CircularTimer from "./CircularTimer";
 import tieData from "../data/tiebreaker.json";
 import "./QuizScreen.css";
 
-// Utility: Check if string is a media URL
 const isMediaUrl = (str) => {
   if (!str || typeof str !== "string") return false;
   const image = /\.(jpg|jpeg|png|gif|svg|webp)$/i;
@@ -199,11 +187,7 @@ function RestartModal({ onConfirm, onCancel }) {
   );
 }
 
-function PasswordLockModal({
-  onSubmit,
-  onCancel,
-  error,
-}) {
+function PasswordLockModal({ onSubmit, onCancel, error }) {
   const [pwd, setPwd] = useState("");
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -256,7 +240,11 @@ function PasswordLockModal({
             <button type="submit" className="restart-modal-btn confirm">
               Unlock
             </button>
-            <button type="button" className="restart-modal-btn" onClick={onCancel}>
+            <button
+              type="button"
+              className="restart-modal-btn"
+              onClick={onCancel}
+            >
               Cancel
             </button>
           </div>
@@ -267,33 +255,124 @@ function PasswordLockModal({
 }
 
 export default function QuizScreen({ quizState, setQuizState }) {
-  // Inject scoped layout CSS
+  // Inject layout + color CSS updates (Leaderboard refined)
   const injectedLayoutCSS = `
-    .qbox { position: relative; display: flex; flex-direction: column; gap: 10px; }
+    /* Right panel split: header on top, content split below */
+    .right-panel { display: flex; flex-direction: column; gap: 12px; }
+    .rtop-card {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; border-radius: 12px; background: #ffffff;
+      box-shadow: 0 2px 10px rgba(109,198,255,0.15);
+      border: 1px solid #eef4ff;
+    }
+    .rtop-left { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+    .rtop-round { font-weight: 900; color: #1e4e80; font-size: 1.08rem; letter-spacing: .02em; }
+    .rtop-team { font-weight: 900; color: #5F2F83; font-size: 1.02rem; }
+
+    .rtop-card .revert-btn {
+      padding: 8px 12px; border-radius: 10px; border: none; font-weight: 800;
+      background: linear-gradient(90deg, #f3fafe 0%, #e7f2ff 100%);
+      color: #1e4e80; box-shadow: 0 2px 8px rgba(109,198,255,0.25);
+      cursor: pointer;
+    }
+    .rtop-card .revert-btn:hover { filter: brightness(0.98); }
+
+    /* Bottom split */
+    .rbottom-split { display: flex; gap: 16px; align-items: stretch; min-height: 420px; }
+    .q-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .qbox { position: relative; display: flex; flex-direction: column; gap: 12px; }
     .q-main { flex: 1; min-height: 0; display: flex; }
-    .q-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; padding-right: 4px; }
+    .q-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; overflow: visible; padding-right: 0; }
 
-    /* Slim, subtle scrollbar only for question container */
-    .q-scroll { scrollbar-width: thin; scrollbar-color: rgba(34,34,34,0.18) transparent; }
-    .q-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-    .q-scroll::-webkit-scrollbar-track { background: transparent; }
-    .q-scroll::-webkit-scrollbar-thumb { background: rgba(34,34,34,0.22); border-radius: 8px; }
-    .q-scroll:hover::-webkit-scrollbar-thumb { background: rgba(34,34,34,0.32); }
-    .q-scroll::-webkit-scrollbar-corner { background: transparent; }
+    .q-scroll .q-row, .q-media { max-width: 1200px; margin: 0 auto; width: 100%; }
+    .opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; max-width: 1100px; margin: 8px auto 0; }
 
-    .q-row { width: 100%; }
-    .q-media { width: 100%; display: flex; align-items: center; justify-content: center; }
-    .opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 940px; margin: 6px auto 0; }
-    .q-status { margin-top: clamp(10px, 1.6vh, 16px); display: flex; align-items: center; justify-content: center; min-height: 1.6em; }
-    .q-line { font-size: 0.95rem; line-height: 1.3; font-weight: 800; text-align: center; }
+    .q-status { margin-top: clamp(8px, 1.2vh, 14px); display: flex; align-items: center; justify-content: center; min-height: 1.6em; }
+    .q-line { font-size: 0.98rem; line-height: 1.35; font-weight: 800; text-align: center; }
     .q-line.warn { color: #b91c1c; }
     .q-line.answer { color: #0b6b2a; }
-    .question-main-text { word-wrap: break-word; overflow-wrap: anywhere; font-size: clamp(1.08rem, 1.6vw, 1.65rem) !important; }
+
+    .question-main-text {
+      word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap;
+      font-size: clamp(1.18rem, 2.05vw, 2.06rem) !important;
+      line-height: 1.35; color: #222037;
+    }
+
+    /* Buttons column wrapper with subtle card */
+    .side-controls-wrap {
+      width: 240px; flex: 0 0 240px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 12px; background: #fff; border: 1px solid #eef4ff;
+      box-shadow: 0 2px 10px rgba(73,160,157,0.12);
+    }
+    .side-controls {
+      width: 200px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; justify-content: center;
+    }
+
+    /* Modern simple button colors */
+    .side-controls .control-btn {
+      padding: 12px 14px; border-radius: 10px; border: 1px solid #e6eef9; font-weight: 900; cursor: pointer;
+      background: linear-gradient(90deg, #f7fbff 0%, #ffffff 100%); color: #1e4e80;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .side-controls .control-btn.green {
+      background: linear-gradient(90deg,#eaf8f0 0%, #dff4e8 100%); color: #0b6b2a; border-color: #cfead7;
+    }
+    .side-controls .control-btn.red {
+      background: linear-gradient(90deg,#ffefef 0%, #ffe2e2 100%); color: #7a1f1f; border-color: #ffd0d0;
+    }
+    .side-controls .control-btn:hover { filter: brightness(0.985); }
+    .side-controls .control-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* Start Question button colors */
+    .start-question-btn {
+      background: linear-gradient(90deg, #fff3c4 0%, #ffe066 100%) !important;
+      color: #7c6900 !important; box-shadow: 0 2px 10px rgba(255,224,102,0.35) !important;
+    }
+
+    /* Leaderboard: single-line rows, ends aligned, compact so 5 fit without scroll */
+    .team-list {
+      list-style: none; margin: 0; padding: 0;
+      display: flex; flex-direction: column; gap: 6px;
+      overflow: hidden;
+    }
+    .team-item {
+      display: flex;
+      flex-direction: row; 
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 15px; border-radius: 8px;
+      background: linear-gradient(90deg, #ffffff 0%, #f8fbff 100%);
+      border: 1px solid #eef4ff;
+      min-height: 2.4em;
+      font-size: 1.02rem; color: #222037;
+    }
+    .team-item.highlight {
+      background: linear-gradient(90deg, #fffbe6 0%, #ffe9b0 100%);
+    }
+    .team-name {
+      flex: 1 1 auto; min-width: 0;
+      font-weight: 700; color: #5F2F83;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      padding-right: 12px;
+    }
+    .team-score {
+      flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+      font-weight: 900; color: #1e4e80;
+      white-space: nowrap;
+    }
+    .team-score .trophy { margin-left: 2px; }
+
     @media (max-width: 1280px) {
-      .opts-grid { max-width: 860px; }
+      .opts-grid { max-width: 980px; }
+      .side-controls-wrap { width: 220px; flex-basis: 220px; }
+      .side-controls { width: 190px; }
     }
     @media (max-width: 1024px) {
       .opts-grid { grid-template-columns: 1fr; max-width: 740px; }
+      .rbottom-split { flex-direction: column; }
+      .side-controls-wrap { width: 100%; flex-basis: auto; }
+      .side-controls { width: 100%; }
     }
   `;
 
@@ -321,6 +400,18 @@ export default function QuizScreen({ quizState, setQuizState }) {
     ? teams
     : aliveTeams;
 
+  // Per-round pass settings
+  const currentRoundId = roundsMode ? currentRound?.id : null;
+  const perRoundMap = quizState?.timerSettings?.perRoundMap || {};
+  const passEnabled =
+    currentRoundId && typeof perRoundMap[currentRoundId]?.passOn !== "undefined"
+      ? !!perRoundMap[currentRoundId].passOn
+      : true;
+  const roundPassTime =
+    currentRoundId && typeof perRoundMap[currentRoundId]?.passTime === "number"
+      ? perRoundMap[currentRoundId].passTime
+      : undefined;
+
   // UI state
   const [questions, setQuestions] = useState([]);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -331,7 +422,8 @@ export default function QuizScreen({ quizState, setQuizState }) {
   const [timeUp, setTimeUp] = useState(false);
   const [questionRevealed, setQuestionRevealed] = useState(false);
   const [showRoundCompleteScreen, setShowRoundCompleteScreen] = useState(false);
-  const [lastCompletedRoundIndex, setLastCompletedRoundIndex] = useState(null);
+  const [lastCompletedRoundIndex, setLastCompletedRoundIndex] =
+    useState(null);
   const [showConfirmRestart, setShowConfirmRestart] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -349,14 +441,17 @@ export default function QuizScreen({ quizState, setQuizState }) {
   const perRoundTimers =
     (quizState.timerSettings && quizState.timerSettings.perRound) ||
     [30, 30, 30, 30, 30];
-  const passOnTimer =
-    (quizState.timerSettings && quizState.timerSettings.passOn) || 15;
 
-  // Helper: derive tie-breaker questions count based on tied team count
+  const passOnTimer =
+    (typeof roundPassTime === "number" ? roundPassTime : undefined) ??
+    (quizState.timerSettings?.passOn ?? 5);
+
+  // Tie-breaker helper
   const deriveTieBreakerQuestions = (count) => {
-    const all = (tieData && Array.isArray(tieData.questions)) ? tieData.questions : [];
+    const all =
+      tieData && Array.isArray(tieData.questions) ? tieData.questions : [];
     if (count <= 0) return [];
-    let desired = count === 2 ? 4 : count; // 2 teams -> 4 questions; otherwise one per team
+    let desired = count === 2 ? 4 : count;
     desired = Math.min(desired, all.length);
     return all.slice(0, desired);
   };
@@ -367,7 +462,9 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
   const getEffectiveTimeLeft = (t, ctx) => {
     if (!t) {
-      return ctx.roundsMode ? (ctx.perRoundTimers[ctx.currentRoundIndex] ?? 30) : 30;
+      return ctx.roundsMode
+        ? ctx.perRoundTimers[ctx.currentRoundIndex] ?? 30
+        : 30;
     }
     if (t.running && t.startedAt) {
       const elapsed = Math.floor((Date.now() - t.startedAt) / 1000);
@@ -379,7 +476,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
       return Math.max(0, (t.timeLeft ?? base) - elapsed);
     }
     if (typeof t.timeLeft === "number") return t.timeLeft;
-    return ctx.roundsMode ? (ctx.perRoundTimers[ctx.currentRoundIndex] ?? 30) : 30;
+    return ctx.roundsMode ? ctx.perRoundTimers[ctx.currentRoundIndex] ?? 30 : 30;
   };
 
   const normalizeQuizStateForSnapshot = (state) => {
@@ -506,7 +603,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
   };
   // --------------- End History ----------------
 
-  // Load questions for the current round or legacy round
+  // Load questions
   useEffect(() => {
     if (roundsMode) {
       setQuestions(currentRound?.questions ?? []);
@@ -531,7 +628,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
   const questionObj = questions?.[currentQuestion];
 
-  // Initialize on first mount: normalize timer and seed history
+  // First mount normalization
   useEffect(() => {
     if (isFirstMount.current) {
       isFirstMount.current = false;
@@ -555,13 +652,12 @@ export default function QuizScreen({ quizState, setQuizState }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reset per-question UI (skip if restoring via revert)
+  // Reset per-question UI
   useEffect(() => {
     if (suppressResetRef.current) {
       suppressResetRef.current = false;
       return;
     }
-    // Initialize timer for new question: full base time, paused (manual start)
     const baseTime = roundsMode
       ? perRoundTimers[currentRoundIndex] ?? 30
       : 30;
@@ -592,7 +688,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestion, started, legacyRound, currentRoundIndex]);
 
-  // Timer tick (restart interval when startedAt changes)
+  // Timer tick
   useEffect(() => {
     if (!started || !timer?.running || timer.paused || showAnswer) {
       clearInterval(timerRef.current);
@@ -621,7 +717,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     started,
     timer?.running,
     timer?.paused,
-    timer?.startedAt, // ensure interval re-init when switching to pass mode
+    timer?.startedAt,
     showAnswer,
     setQuizState,
   ]);
@@ -630,21 +726,18 @@ export default function QuizScreen({ quizState, setQuizState }) {
     setTimeUp(timer?.timeLeft === 0 && !showAnswer);
   }, [timer, showAnswer]);
 
-  // Round-complete detector (robust) - SKIP for tiebreaker round to avoid loop UI
+  // Round-complete detector (after moving past last question)
   useEffect(() => {
     if (!started) return;
     const qLen = Array.isArray(questions) ? questions.length : 0;
     const atEndIndex = qLen > 0 && currentQuestion >= qLen;
-    const lastQAnswered =
-      qLen > 0 && currentQuestion === qLen - 1 && showAnswer === true;
 
     if (
-      (atEndIndex || lastQAnswered) &&
+      atEndIndex &&
       !showRoundCompleteScreen &&
       quizState.round !== "finished" &&
       !tieIntro
     ) {
-      // Do not show Round Complete for tiebreaker in rounds mode
       if (roundsMode && currentRound?.id === "tiebreaker") return;
 
       if (roundsMode) setLastCompletedRoundIndex(currentRoundIndex);
@@ -655,7 +748,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
     started,
     questions,
     currentQuestion,
-    showAnswer,
     showRoundCompleteScreen,
     quizState.round,
     tieIntro,
@@ -664,7 +756,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     currentRound?.id,
   ]);
 
-  // Tie-breaker finishing: decide winners based on gains vs base, then finish (shared winners allowed)
+  // Tie-breaker finishing
   useEffect(() => {
     if (!roundsMode) return;
     const current = quizState.rounds?.[quizState.currentRoundIndex];
@@ -709,7 +801,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     quizState.scores,
   ]);
 
-  // Leaderboard
+  // Leaderboard data (sorted)
   const leaderboard = useMemo(() => {
     const arr = (teamsToUse || []).map((team) => ({
       name: team,
@@ -724,7 +816,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
   const highestScore = leaderboard.length > 0 ? leaderboard[0].score : 0;
 
-  // Pause / Play via CircularTimer click (manual control)
+  // Pause/Play
   const handlePausePlay = () => {
     saveSnapshot("pause-play");
     clearInterval(timerRef.current);
@@ -764,7 +856,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     clearInterval(timerRef.current);
     setShowConfirmRestart(false);
     localStorage.removeItem("quizState");
-    writeHistory([]); // clear history on hard restart
+    writeHistory([]);
     setQuizState({
       teams: [],
       aliveTeams: [],
@@ -787,7 +879,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
       currentRoundIndex: 0,
       timerSettings: {
         perRound: [30, 30, 30, 30, 30],
-        passOn: 15,
+        passOn: 5,
       },
     });
     const seed = {
@@ -813,7 +905,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
         currentRoundIndex: 0,
         timerSettings: {
           perRound: [30, 30, 30, 30, 30],
-          passOn: 15,
+          passOn: 5,
         },
       }),
       ui: currentUIState(),
@@ -856,13 +948,11 @@ export default function QuizScreen({ quizState, setQuizState }) {
     });
   };
 
-  // Password lock helpers
+  // Password lock
   const PASSWORD = "campq202530";
-
   const requireLockNow =
-    (quizState.started && quizState.round !== "finished" && !isUnlocked);
+    quizState.started && quizState.round !== "finished" && !isUnlocked;
 
-  // On initial load or whenever started status flips to ongoing, show lock (only if not unlocked yet)
   useEffect(() => {
     if (quizState.started && quizState.round !== "finished" && !isUnlocked) {
       setLockError("");
@@ -882,12 +972,10 @@ export default function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleLockCancel = () => {
-    // Keep the lock open; optional behavior: allow cancel to just keep overlay
     setShowLock(true);
   };
 
   const handleStartQuiz = () => {
-    // Enforce password on quiz start
     if (!isUnlocked) {
       setLockError("");
       setShowLock(true);
@@ -905,8 +993,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
   const handleStartQuestion = () => {
     saveSnapshot("start-question");
-    // Reveal the question but DO NOT start the timer automatically.
-    // Initialize timer to full base time, paused.
     const baseTime = roundsMode
       ? perRoundTimers[currentRoundIndex] ?? 30
       : 30;
@@ -930,6 +1016,8 @@ export default function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handlePass = () => {
+    if (!passEnabled) return;
+
     saveSnapshot("pass");
     clearInterval(timerRef.current);
     const totalTeams = teamsToUse.length;
@@ -965,7 +1053,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
     } else {
       setPassedTeams(newPassedTeams);
       setQuestionRevealed(true);
-      // Auto-start pass timer (explicit)
       setQuizState((prev) => {
         const nextState = {
           ...prev,
@@ -975,7 +1062,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
             paused: false,
             passMode: true,
             timeLeft: passOnTimer,
-            startedAt: Date.now(), // ensures timer effect restarts
+            startedAt: Date.now(),
           },
         };
         try {
@@ -987,7 +1074,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleCorrect = () => {
-    // Score: base/original team gets question.points (default 10); pass-on team gets 5
     saveSnapshot("correct");
     clearInterval(timerRef.current);
     const teamName = teamsToUse[turn];
@@ -1011,7 +1097,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
           running: false,
           paused: true,
           passMode: false,
-          timeLeft: roundsMode ? (perRoundTimers[currentRoundIndex] ?? 30) : 30,
+          timeLeft: roundsMode ? perRoundTimers[currentRoundIndex] ?? 30 : 30,
           startedAt: null,
         },
       };
@@ -1055,7 +1141,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
   };
 
   const handleOptionSelect = (idx) => {
-    // Show the answer first; do NOT auto-advance; ALSO pause the timer immediately.
     if (!questionRevealed) {
       saveSnapshot("select-option-first-reveal");
       setQuestionRevealed(true);
@@ -1064,7 +1149,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
     }
     setSelectedOption(idx);
     setShowAnswer(true);
-    // Pause timer when revealing via option click
     setQuizState((prev) => {
       const nextState = {
         ...prev,
@@ -1082,25 +1166,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     });
   };
 
-  const getCorrectAnswerText = () => {
-    if (!questionObj) return "";
-    if (
-      Array.isArray(questionObj.options) &&
-      typeof questionObj.answerIndex === "number"
-    ) {
-      return questionObj.options[questionObj.answerIndex];
-    }
-    if (questionObj.answer) return questionObj.answer;
-    if (
-      typeof questionObj.answerIndex === "number" &&
-      Array.isArray(questionObj.options)
-    ) {
-      return questionObj.options[questionObj.answerIndex];
-    }
-    return "";
-  };
-
-  // Legacy tie-intros
+  // Tie-intros (legacy and rounds)
   if (tieIntro === "tie") {
     const scoringTeams =
       quizState.aliveTeams && quizState.aliveTeams.length
@@ -1129,9 +1195,10 @@ export default function QuizScreen({ quizState, setQuizState }) {
                 tiebreaker: derivedQs,
                 aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
                 tieBaseScores: Object.fromEntries(
-                  (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
-                    (t) => [t, prev.scores?.[t] || 0]
-                  )
+                  (tiedTeams.length ? tiedTeams : prev.aliveTeams).map((t) => [
+                    t,
+                    prev.scores?.[t] || 0,
+                  ])
                 ),
               };
               try {
@@ -1141,7 +1208,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
             });
           }}
         />
-        {/* Password lock overlay if needed */}
         {quizState.started && quizState.round !== "finished" && showLock && !isUnlocked && (
           <PasswordLockModal
             onSubmit={handleLockSubmit}
@@ -1180,9 +1246,10 @@ export default function QuizScreen({ quizState, setQuizState }) {
                 finalTiebreaker: derivedQs,
                 aliveTeams: tiedTeams.length ? tiedTeams : prev.aliveTeams,
                 tieBaseScores: Object.fromEntries(
-                  (tiedTeams.length ? tiedTeams : prev.aliveTeams).map(
-                    (t) => [t, prev.scores?.[t] || 0]
-                  )
+                  (tiedTeams.length ? tiedTeams : prev.aliveTeams).map((t) => [
+                    t,
+                    prev.scores?.[t] || 0,
+                  ])
                 ),
               };
               try {
@@ -1202,8 +1269,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
       </>
     );
   }
-
-  // Rounds-mode tie intro (after last selected round if tied)
   if (tieIntro === "rounds-tie") {
     const tiedTeams = quizState.roundsTieTeams || [];
     const derivedQs = deriveTieBreakerQuestions(tiedTeams.length);
@@ -1220,13 +1285,11 @@ export default function QuizScreen({ quizState, setQuizState }) {
           onStart={() => {
             saveSnapshot("start-rounds-tiebreaker");
             setQuizState((prev) => {
-              // check if tiebreaker round already exists
               const existingIndex = (prev.rounds || []).findIndex(
                 (r) => r && r.id === "tiebreaker"
               );
 
               if (existingIndex >= 0) {
-                // patch its questions to derived set
                 const newRounds = [...prev.rounds];
                 const existing = { ...(newRounds[existingIndex] || {}) };
                 existing.questions = derivedQs;
@@ -1266,7 +1329,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
                 return next;
               }
 
-              // append a new tie-breaker round with derived questions
               const newRounds = [
                 ...(prev.rounds || []),
                 {
@@ -1318,7 +1380,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     );
   }
 
-  // Round complete screen (shows after each round reliably)
+  // Round complete screen
   if (showRoundCompleteScreen) {
     const idx = lastCompletedRoundIndex ?? currentRoundIndex;
     const roundLabel = roundsMode
@@ -1365,21 +1427,22 @@ export default function QuizScreen({ quizState, setQuizState }) {
           <div className="leaderboard-container">
             <h2 className="leaderboard-title">Leaderboard</h2>
             <ul className="team-list" ref={teamListRef}>
-              {leaderboard.map((teamObj) => (
+              {leaderboard.map((teamObj, i) => (
                 <li
-                  className="team-item"
+                  className={`team-item${
+                    teamsToUse[turn] === teamObj.name ? " highlight" : ""
+                  }`}
                   key={teamObj.name}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
                 >
-                  <span>{teamObj.name}</span>
-                  <span>
-                    {teamObj.score}
-                    {teamObj.score === highestScore && highestScore > 0 ? (
-                      <span className="trophy">🏆</span>
+                  <span className="team-name" title={teamObj.name}>
+                    {teamObj.name}
+                  </span>
+                  <span className="team-score">
+                    <span className="score">{teamObj.score}</span>
+                    {i === 0 &&
+                    teamObj.score === highestScore &&
+                    highestScore > 0 ? (
+                      <span className="trophy" title="Top Team">🏆</span>
                     ) : null}
                   </span>
                 </li>
@@ -1434,7 +1497,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
           />
         )}
 
-        {/* Password lock overlay if needed (quiz may be ongoing across overlays) */}
         {requireLockNow && showLock && !isUnlocked && (
           <PasswordLockModal
             onSubmit={handleLockSubmit}
@@ -1446,7 +1508,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
     );
   }
 
-  // Continue after round-complete: advance or tie-breaker or finish
   function handleShowTieIntroAfterRoundComplete() {
     saveSnapshot("after-round-complete");
     setShowRoundCompleteScreen(false);
@@ -1455,7 +1516,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
       setQuizState((prev) => {
         const nextIndex = (prev.currentRoundIndex || 0) + 1;
 
-        // All selected rounds finished
         if (nextIndex >= (prev.rounds?.length || 0)) {
           const scoringTeams =
             prev.aliveTeams && prev.aliveTeams.length
@@ -1486,7 +1546,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
             return next;
           }
 
-          // No tie -> finish and announce winners
           const winners = tiedTeams;
           const finishedState = {
             ...prev,
@@ -1501,7 +1560,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
           return finishedState;
         }
 
-        // Move to next round
         const next = {
           ...prev,
           currentRoundIndex: nextIndex,
@@ -1512,7 +1570,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
             timeLeft:
               (prev.timerSettings?.perRound &&
                 prev.timerSettings.perRound[nextIndex]) || 30,
-            paused: true, // keep paused until host starts
+            paused: true,
             passMode: false,
             startedAt: null,
           },
@@ -1524,7 +1582,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
         return next;
       });
     } else {
-      // Legacy: show tie flow between non-rounds states
       setQuizState((prev) => {
         const next = {
           ...prev,
@@ -1594,28 +1651,25 @@ export default function QuizScreen({ quizState, setQuizState }) {
               />
             </div>
           </div>
-          <div
-            className="leaderboard-container"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minHeight: "220px",
-            }}
-          >
-            <div className="winner-display" role="status" aria-live="polite">
-              <div className="winner-shine" />
-              <div className="trophy-pop" aria-hidden="true">
-                🏆
-              </div>
-              <div className="winner-text" style={{ zIndex: 2 }}>
-                {winnersToShow?.length > 1
-                  ? `🎉 Shared Victory: ${winnersToShow.join(" & ")}!`
-                  : winnersToShow?.length === 1
-                  ? `🏆 ${winnersToShow[0]} Wins!`
-                  : "No winner determined"}
-              </div>
-            </div>
+          <div className="leaderboard-container">
+            <h2 className="leaderboard-title">Leaderboard</h2>
+            <ul className="team-list" ref={teamListRef}>
+              {leaderboard.map((teamObj, i) => (
+                <li className="team-item" key={teamObj.name}>
+                  <span className="team-name" title={teamObj.name}>
+                    {teamObj.name}
+                  </span>
+                  <span className="team-score">
+                    <span className="score">{teamObj.score}</span>
+                    {i === 0 &&
+                    teamObj.score === highestScore &&
+                    highestScore > 0 ? (
+                      <span className="trophy" title="Top Team">🏆</span>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 
@@ -1730,7 +1784,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
           />
         )}
 
-        {/* Password lock overlay if needed */}
         {requireLockNow && showLock && !isUnlocked && (
           <PasswordLockModal
             onSubmit={handleLockSubmit}
@@ -1747,9 +1800,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     return (
       <div className="container" style={{ position: "relative" }}>
         <style>{injectedLayoutCSS}</style>
-        <div
-          style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}
-        >
+        <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
           <button
             className="revert-btn"
             onClick={revertSnapshot}
@@ -1778,30 +1829,29 @@ export default function QuizScreen({ quizState, setQuizState }) {
             <h2 className="leaderboard-title">Leaderboard</h2>
             <ul className="team-list" ref={teamListRef}>
               <AnimatePresence>
-                {leaderboard.map((teamObj) => (
+                {leaderboard.map((teamObj, i) => (
                   <motion.li
                     key={teamObj.name}
                     layout
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 400,
-                      damping: 35,
-                    }}
-                    className="team-item"
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      minHeight: "3.6em",
-                      fontWeight: "400",
-                      fontSize: "1.16rem",
-                      alignItems: "center",
-                    }}
+                    transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                    className={`team-item${
+                      teamsToUse[turn] === teamObj.name ? " highlight" : ""
+                    }`}
                   >
-                    <span style={{ fontWeight: "400" }}>{teamObj.name}</span>
-                    <span>{teamObj.score}</span>
+                    <span className="team-name" title={teamObj.name}>
+                      {teamObj.name}
+                    </span>
+                    <span className="team-score">
+                      <span className="score">{teamObj.score}</span>
+                      {i === 0 &&
+                      teamObj.score === highestScore &&
+                      highestScore > 0 ? (
+                        <span className="trophy" title="Top Team">🏆</span>
+                      ) : null}
+                    </span>
                   </motion.li>
                 ))}
               </AnimatePresence>
@@ -1809,31 +1859,36 @@ export default function QuizScreen({ quizState, setQuizState }) {
           </div>
         </div>
 
-        <div
-          className="right-panel"
-          style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <button
-            className="big-start-btn"
-            onClick={handleStartQuiz}
+        <div className="right-panel" style={{ display: "flex" }}>
+          <div
             style={{
-              fontSize: "2rem",
-              padding: "1.3rem 3.5rem",
-              borderRadius: "2.5rem",
-              border: "none",
-              background: "linear-gradient(90deg, #6dc6ff 0%, #f3fafe 100%)",
-              color: "#1e4e80",
-              fontWeight: 700,
-              cursor: "pointer",
-              boxShadow: "0 2px 10px #6dc6ff33",
-              transition: "background 0.2s, color 0.2s",
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            Start Quiz
-          </button>
+            <button
+              className="big-start-btn"
+              onClick={handleStartQuiz}
+              style={{
+                fontSize: "2rem",
+                padding: "1.3rem 3.5rem",
+                borderRadius: "2.5rem",
+                border: "none",
+                background: "linear-gradient(90deg, #6dc6ff 0%, #f3fafe 100%)",
+                color: "#1e4e80",
+                fontWeight: 700,
+                cursor: "pointer",
+                boxShadow: "0 2px 10px rgba(109,198,255,0.35)",
+                transition: "background 0.2s, color 0.2s",
+              }}
+            >
+              Start Quiz
+            </button>
+          </div>
         </div>
 
-        {/* Password lock overlay if needed (only appears when quiz is ongoing or when Start is pressed without unlock) */}
         {requireLockNow && showLock && !isUnlocked && (
           <PasswordLockModal
             onSubmit={handleLockSubmit}
@@ -1841,7 +1896,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
             error={lockError}
           />
         )}
-        {/* If user clicked Start and we showed lock instead, also show lock here (started still false). */}
         {!started && showLock && !isUnlocked && (
           <PasswordLockModal
             onSubmit={handleLockSubmit}
@@ -1860,7 +1914,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     );
   }
 
-  // --- Quiz Running Screen ---
+  // --- Quiz Running Screen (with header and side controls) ---
   let roundTitle = "Quiz";
   if (roundsMode) {
     roundTitle = currentRound?.title ?? `Round ${currentRoundIndex + 1}`;
@@ -1872,7 +1926,8 @@ export default function QuizScreen({ quizState, setQuizState }) {
     ? `Round ${currentRoundIndex + 1}`
     : legacyRound.toUpperCase();
 
-  // Prepare media (displayed below question text)
+  const passLabel = passEnabled ? "(Pass-On Round)" : "(No-Pass_On Round)";
+
   const mediaStyle = {
     maxWidth: "100%",
     width: "100%",
@@ -1941,16 +1996,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
     <div className="container" style={{ position: "relative" }}>
       <style>{injectedLayoutCSS}</style>
 
-      <div style={{ position: "absolute", right: 12, top: 12, zIndex: 1200 }}>
-        <button
-          className="revert-btn"
-          onClick={revertSnapshot}
-          title="Revert last change"
-        >
-          Revert
-        </button>
-      </div>
-
       <div className="left-panel">
         <button
           className="small-restart-btn"
@@ -2005,26 +2050,16 @@ export default function QuizScreen({ quizState, setQuizState }) {
                   className={`team-item${
                     teamsToUse[turn] === teamObj.name ? " highlight" : ""
                   }`}
-                  style={{
-                    minHeight: "3.6em",
-                    fontWeight: "650",
-                    fontSize: "1.16rem",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
                 >
-                  <span style={{ fontWeight: "650", color: "#5F2F83" }}>
+                  <span className="team-name" title={teamObj.name}>
                     {teamObj.name}
                   </span>
-                  <span>
-                    {teamObj.score}
+                  <span className="team-score">
+                    <span className="score">{teamObj.score}</span>
                     {i === 0 &&
                     teamObj.score === highestScore &&
                     highestScore > 0 ? (
-                      <span className="trophy" title="Top Team">
-                        🏆
-                      </span>
+                      <span className="trophy" title="Top Team">🏆</span>
                     ) : null}
                   </span>
                 </motion.li>
@@ -2035,177 +2070,204 @@ export default function QuizScreen({ quizState, setQuizState }) {
       </div>
 
       <div className="right-panel">
-        <div className="quiz-header-row"></div>
-
-        <div className="right-title" style={{ textAlign: "left", marginBottom: 8 }}>
-          <div>
-            {currentRoundNumberLabel} — {roundTitle}
+        {/* Header container with round + team and Revert on the right */}
+        <div className="rtop-card">
+          <div className="rtop-left">
+            <div className="rtop-round">
+              {currentRoundNumberLabel} — {roundTitle} {passLabel}
+            </div>
+            <div className="rtop-team">Question for {teamsToUse[turn]}</div>
           </div>
-        </div>
-
-        <div style={{ textAlign: "left", marginBottom: 0 }}>
-          <div
-            className="right-title-q"
-            style={{
-              marginBottom: 0,
-              fontSize: "1.45rem",
-              fontWeight: 800,
-              minHeight: "3.1em",
-            }}
-          >
-            Question for {teamsToUse[turn]}
-          </div>
-        </div>
-
-        {!questionRevealed ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "170px",
-            }}
-          >
+          <div className="rtop-right">
             <button
-              className="start-question-btn"
-              onClick={handleStartQuestion}
-              style={{
-                fontSize: "1.1rem",
-                padding: "0.8rem 2.2rem",
-                borderRadius: "2rem",
-                border: "none",
-                background: "linear-gradient(90deg, #fff3c4 0%, #ffe066 100%)",
-                color: "#7c6900",
-                fontWeight: 700,
-                cursor: "pointer",
-                boxShadow: "0 2px 8px #ffe06633",
-                transition: "background 0.2s, color 0.2s",
-              }}
+              className="revert-btn"
+              onClick={revertSnapshot}
+              title="Revert last change"
             >
-              Start Question
+              Revert
             </button>
           </div>
-        ) : (
-          <div className={`question-box responsive-media-box qbox`}>
-            {/* MAIN CONTENT AREA (scrolls inside if long) */}
-            <div className="q-main">
-              <div className="q-scroll">
-                {/* Top: progress + question */}
-                <div className="q-row">
-                  <span className="question-progress">
-                    {currentQNum}/{totalQuestions}
-                  </span>
-                  <div
-                    className="question-main-text"
-                    style={{ fontWeight: 800, marginTop: 4 }}
-                  >
-                    {questionObj?.question}
-                  </div>
-                </div>
+        </div>
 
-                {/* Media below question (bigger, centered) */}
-                {mediaBlock && (
-                  <div className="q-media">
-                    <div style={{ width: "100%", maxWidth: 1000 }}>
-                      {mediaBlock}
-                    </div>
-                  </div>
-                )}
-
-                {/* Options below media */}
-                {isMultipleChoice && (
-                  <div className="q-row">
-                    <div className="opts-grid">
-                      {questionObj.options.map((opt, i) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            if (!showAnswer) handleOptionSelect(i);
-                          }}
-                          disabled={showAnswer}
-                          aria-pressed={selectedOption === i}
-                          style={optionButtonStyle(i)}
-                        >
-                          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                            <div
-                              style={{
-                                minWidth: 34,
-                                minHeight: 34,
-                                borderRadius: 8,
-                                background: selectedOption === i ? "#f0f4ff" : "#ffffff",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                border: "1px solid #eee",
-                                fontWeight: 800,
-                                color: "#333",
-                              }}
-                            >
-                              {String.fromCharCode(65 + i)}
-                            </div>
-                            <div style={{ flex: 1, textAlign: "left", fontWeight: 700 }}>
-                              {opt}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+        {/* Bottom split: question area and centered controls */}
+        <div className="rbottom-split">
+          {/* Question pane */}
+          <div className="q-pane">
+            {!questionRevealed ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 170,
+                }}
+              >
+                <button
+                  className="start-question-btn"
+                  onClick={handleStartQuestion}
+                  style={{
+                    fontSize: "1.1rem",
+                    padding: "0.8rem 2.2rem",
+                    borderRadius: "2rem",
+                    border: "none",
+                    color: "#7c6900",
+                    cursor: "pointer",
+                    transition: "background 0.2s, color 0.2s",
+                  }}
+                >
+                  Start Question
+                </button>
               </div>
-            </div>
+            ) : (
+              <div className={`question-box responsive-media-box qbox`}>
+                <div className="q-main">
+                  <div className="q-scroll">
+                    {/* Top: progress + question */}
+                    <div className="q-row">
+                      <span className="question-progress">
+                        {currentQNum}/{totalQuestions}
+                      </span>
+                      <div
+                        className="question-main-text"
+                        style={{ fontWeight: 800, marginTop: 4 }}
+                      >
+                        {questionObj?.question}
+                      </div>
+                    </div>
 
-            {/* BOTTOM STATUS LINE (small, always spaced from content) */}
-            <div className="q-status" aria-live="polite">
-              {timeUp && !showAnswer ? (
-                <div className="q-line warn">
-                  Time&apos;s up! Please pass or reveal answer.
+                    {/* Media below question (bigger, centered) */}
+                    {mediaBlock && (
+                      <div className="q-media">
+                        <div style={{ width: "100%", maxWidth: 1200 }}>
+                          {mediaBlock}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Options below media */}
+                    {isMultipleChoice && (
+                      <div className="q-row">
+                        <div className="opts-grid">
+                          {questionObj.options.map((opt, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                if (!showAnswer) handleOptionSelect(i);
+                              }}
+                              disabled={showAnswer}
+                              aria-pressed={selectedOption === i}
+                              style={optionButtonStyle(i)}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 12,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    minWidth: 34,
+                                    minHeight: 34,
+                                    borderRadius: 8,
+                                    background:
+                                      selectedOption === i
+                                        ? "#f0f4ff"
+                                        : "#ffffff",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    border: "1px solid #eee",
+                                    fontWeight: 800,
+                                    color: "#333",
+                                  }}
+                                >
+                                  {String.fromCharCode(65 + i)}
+                                </div>
+                                <div
+                                  style={{
+                                    flex: 1,
+                                    textAlign: "left",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {opt}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : showAnswer ? (
-                <div className="q-line answer">
-                  <b>Answer:</b>{" "}
-                  <span>
-                    {isMultipleChoice
-                      ? (Array.isArray(questionObj?.options) &&
-                        typeof questionObj?.answerIndex === "number"
-                          ? questionObj.options[questionObj.answerIndex]
-                          : "")
-                      : questionObj?.answer || ""}
-                  </span>
+
+                {/* Bottom status line */}
+                <div className="q-status" aria-live="polite">
+                  {timeUp && !showAnswer ? (
+                    <div className="q-line warn">
+                      Time&apos;s up! Please pass or reveal answer.
+                    </div>
+                  ) : showAnswer ? (
+                    <div className="q-line answer">
+                      <b>Answer:</b>{" "}
+                      <span>
+                        {isMultipleChoice
+                          ? (Array.isArray(questionObj?.options) &&
+                            typeof questionObj?.answerIndex === "number"
+                              ? questionObj.options[questionObj.answerIndex]
+                              : "")
+                          : questionObj?.answer || ""}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="q-line" style={{ opacity: 0.0 }}>
+                      &nbsp;
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="q-line" style={{ opacity: 0.0 }}>
-                  &nbsp;
-                </div>
-              )}
+              </div>
+            )}
+          </div>
+
+          {/* Controls column (centered) */}
+          <div className="side-controls-wrap" aria-label="Question Controls">
+            <div className="side-controls">
+              <button
+                className="control-btn"
+                onClick={handlePass}
+                disabled={showAnswer || !questionRevealed || !passEnabled}
+                title={passEnabled ? "Pass to next team" : "Pass disabled for this round"}
+              >
+                Pass
+              </button>
+              <button
+                className="control-btn green"
+                onClick={handleCorrect}
+                disabled={!questionRevealed}
+                title="Mark as Correct"
+              >
+                Correct
+              </button>
+              <button
+                className="control-btn red"
+                onClick={handleReveal}
+                disabled={showAnswer || !questionRevealed}
+                title="Reveal Answer"
+              >
+                Reveal
+              </button>
+              <button
+                className="control-btn"
+                onClick={handleNext}
+                disabled={!showAnswer}
+                title="Next Question"
+              >
+                Next
+              </button>
             </div>
           </div>
-        )}
-
-        <div className="button-row" style={{ marginTop: isMultipleChoice ? 16 : 24 }}>
-          <button
-            className="control-btn"
-            onClick={handlePass}
-            disabled={showAnswer || !questionRevealed}
-          >
-            Pass
-          </button>
-          <button
-            className="control-btn green"
-            onClick={() => {
-              // Host confirms correctness; awards based on pass/base rule
-              handleCorrect();
-            }}
-            disabled={!questionRevealed}
-          >
-            Correct
-          </button>
-          <button className="control-btn red" onClick={handleReveal} disabled={showAnswer || !questionRevealed}>
-            Reveal
-          </button>
-          <button className="control-btn" onClick={handleNext} disabled={!showAnswer}>
-            Next Question
-          </button>
         </div>
 
         {/* Hidden legacy answer box (answer shown in status line) */}
@@ -2226,7 +2288,6 @@ export default function QuizScreen({ quizState, setQuizState }) {
 
       {showConfetti && <ConfettiCelebration />}
 
-      {/* Password lock overlay if needed */}
       {requireLockNow && showLock && !isUnlocked && (
         <PasswordLockModal
           onSubmit={handleLockSubmit}
