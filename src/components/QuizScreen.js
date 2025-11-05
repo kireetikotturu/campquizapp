@@ -267,8 +267,8 @@ export default function QuizScreen({ quizState, setQuizState }) {
       border: 1px solid #eef4ff;
     }
     .rtop-left { display: flex; flex-direction: column; gap: 4px; text-align: left; }
-    .rtop-round { font-weight: 900; color: #1e4e80; font-size: 1.08rem; letter-spacing: .02em; }
-    .rtop-team { font-weight: 900; color: #5F2F83; font-size: 1.02rem; }
+    .rtop-round { font-weight: 900; color: #1e4e80; font-size: 1.18rem; letter-spacing: .02em; }
+    .rtop-team { font-weight: 900; color: #5F2F83; font-size: 1.12rem; }
 
     .rtop-card .revert-btn {
       padding: 8px 12px; border-radius: 10px; border: none; font-weight: 800;
@@ -313,14 +313,14 @@ export default function QuizScreen({ quizState, setQuizState }) {
     /* Modern simple button colors */
     .side-controls .control-btn {
       padding: 12px 14px; border-radius: 10px; border: 1px solid #e6eef9; font-weight: 900; cursor: pointer;
-      background: linear-gradient(90deg, #f7fbff 0%, #ffffff 100%); color: #1e4e80;
+      background: linear-gradient(90deg, #bac3ffff 0%, #ffffff 100%); color: #1e4e80;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
     .side-controls .control-btn.green {
-      background: linear-gradient(90deg,#eaf8f0 0%, #dff4e8 100%); color: #0b6b2a; border-color: #cfead7;
+      background: linear-gradient(90deg,#eaf8f0 0%, #b1ffd3ff 100%); color: #0b6b2a; border-color: #cfead7;
     }
     .side-controls .control-btn.red {
-      background: linear-gradient(90deg,#ffefef 0%, #ffe2e2 100%); color: #7a1f1f; border-color: #ffd0d0;
+      background: linear-gradient(90deg,#ffefef 0%, #ffb5b5ff 100%); color: #7a1f1f; border-color: #ffd0d0;
     }
     .side-controls .control-btn:hover { filter: brightness(0.985); }
     .side-controls .control-btn:disabled { opacity: 0.55; cursor: not-allowed; }
