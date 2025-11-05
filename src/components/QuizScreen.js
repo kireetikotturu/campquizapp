@@ -1,9 +1,10 @@
 // Note: Full QuizScreen with all previous features preserved.
-// This update refines the Leaderboard styling and layout:
-// - Team rows are single line with justify-content: space-between (team name at left, score + trophy at right).
-// - Compact row height and spacing so a minimum of 5 teams fit without scroll.
-// - Truncation with ellipsis for long team names; right side stays aligned.
-// - Modern, simple button colors retained from prior update.
+// This update refines the Leaderboard to:
+// - Keep each team row as a single line with justify-content: space-between (team name left, score + trophy right).
+// - Automatically enable vertical scrolling within the leaderboard when there are many teams (e.g., 6-10+).
+//   The scrollbar is hidden (invisible) while still scrollable.
+// - Ensure the leaderboard never overflows the viewport; it auto-adjusts to scroll inside the left panel.
+// - Show the trophy (🏆) for ALL teams tied at the top score (and score > 0), not only the first row.
 // All existing features and logic (timer, pass, tie-breakers, password lock, revert history, etc.) remain unchanged.
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -255,7 +256,7 @@ function PasswordLockModal({ onSubmit, onCancel, error }) {
 }
 
 export default function QuizScreen({ quizState, setQuizState }) {
-  // Inject layout + color CSS updates (Leaderboard refined)
+  // Inject layout + color CSS updates (Leaderboard refined + smooth, hidden scroll)
   const injectedLayoutCSS = `
     /* Right panel split: header on top, content split below */
     .right-panel { display: flex; flex-direction: column; gap: 12px; }
@@ -330,18 +331,27 @@ export default function QuizScreen({ quizState, setQuizState }) {
       color: #7c6900 !important; box-shadow: 0 2px 10px rgba(255,224,102,0.35) !important;
     }
 
-    /* Leaderboard: single-line rows, ends aligned, compact so 5 fit without scroll */
+    /* LEFT PANEL: make leaderboard area flex and scrollable without visible scrollbar */
+    .left-panel { display: flex; flex-direction: column; min-height: 0; }
+    .leaderboard-container {
+      display: flex; flex-direction: column;
+      flex: 1 1 auto; min-height: 0;
+    }
     .team-list {
       list-style: none; margin: 0; padding: 0;
       display: flex; flex-direction: column; gap: 6px;
-      overflow: hidden;
+      flex: 1 1 auto; min-height: 0;
+      overflow-y: auto; overscroll-behavior: contain;
+      scroll-behavior: smooth;
+      -ms-overflow-style: none; /* IE/Edge */
+      scrollbar-width: none;    /* Firefox */
     }
+    .team-list::-webkit-scrollbar { width: 0; height: 0; } /* WebKit */
+
+    /* Leaderboard row styling: single line, ends aligned */
     .team-item {
-      display: flex;
-      flex-direction: row; 
-      justify-content: space-between;
-      align-items: center;
-      padding: 5px 15px; border-radius: 8px;
+      display: flex; flex-direction: row; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border-radius: 8px;
       background: linear-gradient(90deg, #ffffff 0%, #f8fbff 100%);
       border: 1px solid #eef4ff;
       min-height: 2.4em;
@@ -726,7 +736,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
     setTimeUp(timer?.timeLeft === 0 && !showAnswer);
   }, [timer, showAnswer]);
 
-  // Round-complete detector (after moving past last question)
+  // Round-complete detector
   useEffect(() => {
     if (!started) return;
     const qLen = Array.isArray(questions) ? questions.length : 0;
@@ -1427,7 +1437,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
           <div className="leaderboard-container">
             <h2 className="leaderboard-title">Leaderboard</h2>
             <ul className="team-list" ref={teamListRef}>
-              {leaderboard.map((teamObj, i) => (
+              {leaderboard.map((teamObj) => (
                 <li
                   className={`team-item${
                     teamsToUse[turn] === teamObj.name ? " highlight" : ""
@@ -1439,9 +1449,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
                   </span>
                   <span className="team-score">
                     <span className="score">{teamObj.score}</span>
-                    {i === 0 &&
-                    teamObj.score === highestScore &&
-                    highestScore > 0 ? (
+                    {teamObj.score === highestScore && highestScore > 0 ? (
                       <span className="trophy" title="Top Team">🏆</span>
                     ) : null}
                   </span>
@@ -1607,7 +1615,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
         ? quizState.aliveTeams
         : quizState.teams) || [];
     const maxScore = baseTeams.length
-      ? Math.max(...baseTeams.map((t) => scores[t] || 0))
+      ? Math.max(...baseTeams.map((t) => (scores[t] || 0)))
       : 0;
     const fallbackWinners = baseTeams.filter(
       (t) => (scores[t] || 0) === maxScore
@@ -1654,16 +1662,14 @@ export default function QuizScreen({ quizState, setQuizState }) {
           <div className="leaderboard-container">
             <h2 className="leaderboard-title">Leaderboard</h2>
             <ul className="team-list" ref={teamListRef}>
-              {leaderboard.map((teamObj, i) => (
+              {leaderboard.map((teamObj) => (
                 <li className="team-item" key={teamObj.name}>
                   <span className="team-name" title={teamObj.name}>
                     {teamObj.name}
                   </span>
                   <span className="team-score">
                     <span className="score">{teamObj.score}</span>
-                    {i === 0 &&
-                    teamObj.score === highestScore &&
-                    highestScore > 0 ? (
+                    {teamObj.score === highestScore && highestScore > 0 ? (
                       <span className="trophy" title="Top Team">🏆</span>
                     ) : null}
                   </span>
@@ -1829,7 +1835,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
             <h2 className="leaderboard-title">Leaderboard</h2>
             <ul className="team-list" ref={teamListRef}>
               <AnimatePresence>
-                {leaderboard.map((teamObj, i) => (
+                {leaderboard.map((teamObj) => (
                   <motion.li
                     key={teamObj.name}
                     layout
@@ -1846,9 +1852,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
                     </span>
                     <span className="team-score">
                       <span className="score">{teamObj.score}</span>
-                      {i === 0 &&
-                      teamObj.score === highestScore &&
-                      highestScore > 0 ? (
+                      {teamObj.score === highestScore && highestScore > 0 ? (
                         <span className="trophy" title="Top Team">🏆</span>
                       ) : null}
                     </span>
@@ -2035,7 +2039,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
           <h2 className="leaderboard-title">Leaderboard</h2>
           <ul className="team-list" ref={teamListRef}>
             <AnimatePresence>
-              {leaderboard.map((teamObj, i) => (
+              {leaderboard.map((teamObj) => (
                 <motion.li
                   layout
                   initial={{ opacity: 0, y: 20 }}
@@ -2056,9 +2060,7 @@ export default function QuizScreen({ quizState, setQuizState }) {
                   </span>
                   <span className="team-score">
                     <span className="score">{teamObj.score}</span>
-                    {i === 0 &&
-                    teamObj.score === highestScore &&
-                    highestScore > 0 ? (
+                    {teamObj.score === highestScore && highestScore > 0 ? (
                       <span className="trophy" title="Top Team">🏆</span>
                     ) : null}
                   </span>
