@@ -1,6 +1,6 @@
 {
   "round": 4,
-  "title": "General Knowledge",
+  "title": "General Knowledge (Pass-On-Round)",
   "description": "Pass-on round — strategic passing allowed.",
   "pass_on": false,
   "questions": [

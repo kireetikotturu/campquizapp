@@ -1,12 +1,27 @@
 {
   "round": 999,
   "id": "tiebreaker",
-  "title": "Tie-Breaker Round",
+  "title": "Tie-Breaker Round (Pass-On-Round)",
   "description": "Tie-breaker (play only if top teams are tied). Questions may be MCQ or text.",
   "pass_on": true,
   "questions": [
     {
       "id": "tbq1",
+      "question": "What is the name of the process where a substance goes directly from a solid to a gas without becoming a liquid?",
+      "answer": "Sublimation"
+    },
+    {
+      "id": "tbq2",
+      "question": "In genetics, what does the acronym SNP stand for?",
+      "answer": "Single Nucleotide Polymorphism"
+    },
+    {
+      "id": "tbq3",
+      "question": "What part of the brain is responsible for memory and learning?",
+      "answer": "Hippocampus"
+    },
+    {
+      "id": "tbq4",
       "question": "Which planet is known as the Red Planet?",
       "options": ["Earth", "Mars", "Jupiter", "Venus"],
       "answerIndex": 1,
@@ -14,27 +29,12 @@
       "timeLimitSeconds": 20
     },
     {
-      "id": "tbq2",
-      "question": "What is the chemical formula of water?",
-      "answer": "H2O",
-      "points": 10,
-      "timeLimitSeconds": 20
-    },
-    {
-      "id": "tbq3",
+      "id": "tbq5",
       "question": "Who wrote the play 'Romeo and Juliet'?",
       "options": ["Christopher Marlowe", "William Shakespeare", "Ben Jonson", "John Webster"],
       "answerIndex": 1,
       "points": 10,
       "timeLimitSeconds": 20
-    },
-    {
-      "id": "tbq4",
-      "question": "Identify the logo (example):",
-      "media": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
-      "answer": "Sample Monument",
-      "points": 10,
-      "timeLimitSeconds": 25
     }
   ]
 }

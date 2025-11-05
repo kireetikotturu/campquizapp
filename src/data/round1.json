@@ -1,6 +1,6 @@
 {
   "round": 1,
-  "title": "Sports & Science",
+  "title": "Science & Technology (No-Pass_On Round)",
   "type": "multiple_choice",
   "pass_on": false,
   "questions": [
@@ -39,30 +39,50 @@
     {
       "id": "r1q5",
       "question": "Which technology giant is going to set up a Center of Excellence for AI (Artificial Intelligence) along with GeM?",
-      "options": ["Microsoft", "Infosys", "IBM", "APPLE"],
+      "options": ["Microsoft", "Infosys", "IBM", "Apple"],
       "answerIndex": 2,
       "timeLimitSeconds": 20,
       "points": 10
     },
     {
-      "question": "National Sports Day 2025 in India is dedicated to which legendary player?",
-      "answer": "Major Dhyan Chand"
+      "id": "r1q6",
+      "question": "Name the 100th satellite that ISRO had launched from Sriharikota in Andhra Pradesh.",
+      "options": ["GSAT-11", "RISAT-2", "Cartosat-2", "None of these"],
+      "answerIndex": 2,
+      "timeLimitSeconds": 20,
+      "points": 10
     },
     {
-      "question": "“Perfect 10” is the word used in Cricket for which performance?",
-      "answer": "Bowler taking 10 Wickets in an innings. "
+      "id": "r1q7",
+      "question": "What kind of light can accelerate the ageing process?",
+      "options": ["Red light", "Blue light", "Yellow light", "Green light"],
+      "answerIndex": 1,
+      "timeLimitSeconds": 20,
+      "points": 10
     },
     {
-      "question": "Which hockey player received the Major Dhyan Chand Khel Ratna Award 2024?",
-      "answer": "Harmanpreet Singh"
+      "id": "r1q8",
+      "question": "Which planet’s moon is Ganymede?",
+      "options": ["Jupiter", "Saturn", "Venus", "Mercury"],
+      "answerIndex": 0,
+      "timeLimitSeconds": 20,
+      "points": 10
     },
     {
-      "question": "Ms. N. Usha won the Dhyan Chand Award in the recently announced National Sports Awards of 2020 in which Sport?",
-      "answer": "Boxing"
+      "id": "r1q9",
+      "question": "“Bulletin”, a set of subscription and publishing tools, was launched by which social media company?",
+      "options": ["Twitter", "Instagram", "Snapchat", "Facebook"],
+      "answerIndex": 3,
+      "timeLimitSeconds": 20,
+      "points": 10
     },
     {
-      "question": "When was Kabaddi included in Asian Games?",
-      "answer": "1990"
+      "id": "r1q10",
+      "question": "Who is the founder of Oracle?",
+      "options": ["Christ Lamb", "Larry Ellison", "James Carter", "Henry Smith"],
+      "answerIndex": 1,
+      "timeLimitSeconds": 20,
+      "points": 10
     }
   ]
 }

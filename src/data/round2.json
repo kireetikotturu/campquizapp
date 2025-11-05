@@ -1,60 +1,33 @@
 {
   "round": 2,
-  "title": "Science & Technology",
+  "title": "Sports & Events (Pass_On Round)",
   "description": "Pass-on round — strategic passing allowed.",
   "pass_on": true,
   "questions": [
     {
-      "id": "r1q1",
-      "question": "Name the 100th satellite that ISRO had launched from Sriharikota in Andhra Pradesh?",
-      "options": ["GSAT-11", "RISAT-2", "Cartosat-2", "None of these"],
-      "answerIndex": 2,
-      "timeLimitSeconds": 20,
-      "points": 10
+      "id": "r2q1",
+      "question": "National Sports Day 2025 in India is dedicated to which legendary player?",
+      "answer": "Major Dhyan Chand"
     },
     {
-      "id": "r1q2",
-      "question": "What kind of light can accelerate the ageing process?",
-      "options": ["Red light", "Blue light", "Yellow light", "Green light"],
-      "answerIndex": 1,
-      "timeLimitSeconds": 20,
-      "points": 10
+      "id": "r2q2",
+      "question": "“Perfect 10” is the word used in Cricket for which performance?",
+      "answer": "Bowler taking 10 wickets in an innings."
     },
     {
-      "id": "r1q3",
-      "question": "Which planet’s moon is Ganymede?",
-      "options": ["Jupiter", "Saturn", "Venus", "Mercury"],
-      "answerIndex": 0,
-      "timeLimitSeconds": 20,
-      "points": 10
+      "id": "r2q3",
+      "question": "Which hockey player received the Major Dhyan Chand Khel Ratna Award 2024?",
+      "answer": "Harmanpreet Singh"
     },
     {
-      "id": "r1q4",
-      "question": "“Bulletin”, a set of subscription and publishing tools, was launched by which social media company?",
-      "options": ["Twitter", "Instagram", "Snapchat", "FB"],
-      "answerIndex": 3,
-      "timeLimitSeconds": 20,
-      "points": 10
+      "id": "r2q4",
+      "question": "Ms. N. Usha won the Dhyan Chand Award in the recently announced National Sports Awards of 2020 in which Sport?",
+      "answer": "Boxing"
     },
     {
-      "id": "r1q5",
-      "question": "Who is the founder of Oracle?",
-      "options": ["Christ Lamb", "Larry Ellison", "James Carter", "Henry Smith"],
-      "answerIndex": 1,
-      "timeLimitSeconds": 20,
-      "points": 10
-    },
-    {
-      "question": "What is the name of the process where a substance goes directly from a solid to a gas without becoming a liquid?",
-      "answer": "Sublimation"
-    },
-    {
-      "question": "In genetics, what does the acronym SNP stand for?",
-      "answer": "Single Nucleotide Polymorphism"
-    },
-    {
-      "question": "What part of the brain is responsible for memory and learning?",
-      "answer": "Hippocampus"
+      "id": "r2q5",
+      "question": "When was Kabaddi included in Asian Games?",
+      "answer": "1990"
     }
   ]
 }
