@@ -23,18 +23,12 @@
     {
       "id": "tbq4",
       "question": "Which planet is known as the Red Planet?",
-      "options": ["Earth", "Mars", "Jupiter", "Venus"],
-      "answerIndex": 1,
-      "points": 10,
-      "timeLimitSeconds": 20
+      "answer": "Mars"
     },
     {
       "id": "tbq5",
       "question": "Who wrote the play 'Romeo and Juliet'?",
-      "options": ["Christopher Marlowe", "William Shakespeare", "Ben Jonson", "John Webster"],
-      "answerIndex": 1,
-      "points": 10,
-      "timeLimitSeconds": 20
+      "answer": "William Shakespeare"
     }
   ]
 }
